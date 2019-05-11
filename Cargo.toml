@@ -5,3 +5,12 @@ authors = ["jeremy beuvry <jeremy.beuvry@epita.fr>"]
 edition = "2018"
 
 [dependencies]
+fasthash = "0.4.0"
+
+[lib]
+name = "trie"
+path = "src/lib.rs"
+
+[[bin]]
+name = "trie"
+path = "src/bin.rs"
