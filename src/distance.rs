@@ -9,7 +9,7 @@ use std::cmp::min;
 ///
 /// In this trait, words can be seen as a stack of character that can freely
 /// be added and removed.
-trait IncrementalDistance {
+pub trait IncrementalDistance {
     /// Add a new character to the previous word
     /// and return the computed distance.
     fn push(&mut self, value: u8) -> usize;
@@ -18,6 +18,9 @@ trait IncrementalDistance {
     /// return true if the character could be removed,
     /// or false if there no more character to pop.
     fn pop(&mut self) -> bool;
+
+    /// Get the current word that is being matched against the word.
+    fn current(&self) -> &[u8];
 }
 
 /// Calculate the distance between a word and all words present in a trie.
@@ -30,7 +33,7 @@ trait IncrementalDistance {
 /// of distance will be calculated and this version allows to efficiently
 /// cache the computation when used in a trie.
 #[derive(Debug, Clone)]
-struct DamerauLevenshteinDistance<'a> {
+pub struct DamerauLevenshteinDistance<'a> {
     /// The word that need to be matched against all the other one.
     word: &'a[u8],
     /// All the characters that have been previously added and not popped.
@@ -113,6 +116,10 @@ impl <'a> IncrementalDistance for DamerauLevenshteinDistance<'a> {
 
     fn pop(&mut self) -> bool {
         self.current.pop().is_some()
+    }
+
+    fn current(&self) -> &[u8] {
+        self.current.as_slice()
     }
 }
 
