@@ -8,15 +8,16 @@ use core::num::NonZeroUsize;
 use std::fs::File;
 use std::io::{Read, Write, Seek, SeekFrom};
 
-use super::{Compiler, Search, WordData};
+use super::{Compiler, Search, WordData, WordFrequency};
 use crate::distance::{IncrementalDistance, DamerauLevenshteinDistance};
+use crate::memory::Memory;
 
 /// A very basic node of the trie.
-#[repr(C, packed)]
-struct MiniNode<T> {
+#[repr(C)]
+struct MiniNode {
     /// The associated data of the word,
     /// if the node represent a valid word.
-    data: Option<T>,
+    data: Option<WordFrequency>,
 
     /// The index of the node children if they exist.
     children: [Option<NonZeroUsize>; 256]
@@ -26,24 +27,27 @@ struct MiniNode<T> {
 /// all the nodes to the files when it's done.
 ///
 /// TODO: write the node one by one to the file.
-pub struct MiniCompiler<T> {
-    filename: String,
+pub struct MiniCompiler {
+    //filename: String,
 
-    nodes: Vec<MiniNode<T>>
+    nodes: Memory<MiniNode>
 }
 
-impl <T> MiniCompiler<T> {
+impl MiniCompiler {
     pub fn new(filename: &str) -> Self {
+        let mut memory = Memory::new(filename);
+        memory.push(MiniNode {
+            data: None,
+            children: [None; 256]
+        });
+
         MiniCompiler {
-            filename: String::from(filename),
-            nodes: vec![MiniNode {
-                data: None,
-                children: [None; 256]
-            }]
+            //filename: String::from(filename),
+            nodes: memory
         }
     }
 
-    fn add_rec<'a>(&mut self, node_index: usize, word: &[u8], data: T) {
+    fn add_rec<'a>(&mut self, node_index: usize, word: &[u8], data: WordFrequency) {
         if !word.is_empty() {
             // In the middle of the word.
             if self.nodes[node_index].children[word[0] as usize].is_none() {
@@ -62,12 +66,13 @@ impl <T> MiniCompiler<T> {
     }
 }
 
-impl <T> Compiler<T> for MiniCompiler<T> {
-    fn add<'a>(&mut self, word: &[u8], data: T) {
+impl Compiler for MiniCompiler {
+    fn add<'a>(&mut self, word: &[u8], data: WordFrequency) {
         self.add_rec(0, word, data);
     }
 }
 
+/*
 impl <T> Drop for MiniCompiler<T> {
     fn drop(&mut self) {
         let mut file = File::create(&self.filename).expect("Can't open file");
@@ -82,26 +87,25 @@ impl <T> Drop for MiniCompiler<T> {
         }
     }
 }
+*/
 
-pub struct MiniSearch<T> {
-    file: File,
-
-    _phantom: std::marker::PhantomData<T>
+pub struct MiniSearch {
+    memory: Memory<MiniNode>
 }
 
-impl <T> MiniSearch<T> {
+impl MiniSearch {
     pub fn load(filename: &str) -> Result<Self, String> {
         Ok(MiniSearch {
-            file: File::open(filename).map_err(|error| format!("{}", error))?,
-            _phantom: std::marker::PhantomData
+            memory: Memory::open(filename)?
         })
     }
 }
 
-impl <'a, T: 'a> Search<'a, T> for MiniSearch<T> {
-    fn search(&self, word: &'a [u8], distance: usize) -> Box<dyn Iterator<Item=WordData<T>> + 'a> {
+impl <'a> Search<'a> for MiniSearch {
+    fn search(&'a self, word: &'a [u8], distance: usize) -> Box<dyn Iterator<Item=WordData> + 'a> {
         Box::new(MiniSearchIterator::<'a> {
-            file: self.file.try_clone().expect("Can't duplicate file"),
+            test: &self,
+            memory: &self.memory,
             parents: vec![
                 MiniSearchIteratorIndex {
                     node_index: 0,
@@ -109,8 +113,7 @@ impl <'a, T: 'a> Search<'a, T> for MiniSearch<T> {
                 }
             ],
             distance_calculator: DamerauLevenshteinDistance::new(word),
-            distance: distance,
-            _phantom: std::marker::PhantomData
+            distance: distance
         })
     }
 }
@@ -121,16 +124,15 @@ struct MiniSearchIteratorIndex {
     next_word_index: usize
 }
 
-#[derive(Debug)]
-struct MiniSearchIterator<'a, T> {
-    file: File,
+struct MiniSearchIterator<'a> {
+    test: &'a MiniSearch,
+    memory: &'a Memory<MiniNode>,
     parents: Vec<MiniSearchIteratorIndex>,
     distance_calculator: DamerauLevenshteinDistance<'a>,
-    distance: usize,
-
-    _phantom: std::marker::PhantomData<T>
+    distance: usize
 }
 
+/*
 impl <'a, T> MiniSearchIterator<'a, T> {
     fn read_node(&mut self, node_index: usize) -> MiniNode<T> {
         let mini_node_size = std::mem::size_of::<MiniNode<T>>();
@@ -150,9 +152,10 @@ impl <'a, T> MiniSearchIterator<'a, T> {
         buffer
     }
 }
+*/
 
-impl <'a, T> Iterator for MiniSearchIterator<'a, T> {
-    type Item=WordData<T>;
+impl <'a> Iterator for MiniSearchIterator<'a> {
+    type Item=WordData;
 
     fn next(&mut self) -> Option<Self::Item> {
 
@@ -165,7 +168,7 @@ impl <'a, T> Iterator for MiniSearchIterator<'a, T> {
             }
 
             // Read node
-            let node = self.read_node(self.parents.last()?.node_index);
+            let node = &self.memory[self.parents.last()?.node_index];
 
             // Find the next used node
             while self.parents.last()?.next_word_index < 256 && node.children[self.parents.last()?.next_word_index].is_none() {
@@ -192,7 +195,7 @@ impl <'a, T> Iterator for MiniSearchIterator<'a, T> {
 
             // Go to the next node.
             let children_node_index = node.children[self.parents.last()?.next_word_index - 1].unwrap().get();
-            let children_node = self.read_node(children_node_index);
+            let children_node = &self.memory[children_node_index];
 
             self.parents.push(MiniSearchIteratorIndex {
                 node_index: children_node_index,
@@ -201,10 +204,10 @@ impl <'a, T> Iterator for MiniSearchIterator<'a, T> {
 
             // This is a valid node, return it.
             if calculated_distance <= self.distance {
-                if let Some(data) = children_node.data {
+                if let Some(data) = &children_node.data {
                     return Some(WordData {
                         word: self.distance_calculator.current().to_vec(),
-                        data: data,
+                        data: *data,
                         distance: calculated_distance
                     });
                 }

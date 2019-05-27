@@ -7,13 +7,13 @@ fn main() {
     println!("Hello world!");
 
     {
-        let mut compiler = MiniCompiler::<WordFrequency>::new("test.txt");
+        let mut compiler = MiniCompiler::new("test.txt");
         for word in ["test", "a", "b", "other"].iter() {
             compiler.add(word.as_bytes(), NonZeroU32::new(1).unwrap());
         }
     }
 
-    let mut trie = MiniSearch::<WordFrequency>::load("test.txt").unwrap();
+    let mut trie = MiniSearch::load("test.txt").unwrap();
     for distance in [0, 1, 2, 3, 4].iter() {
         for word in ["test", "a", "b", "other"].iter() {
             println!("Searching {}, distance {}", word, distance);
