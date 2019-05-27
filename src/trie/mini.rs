@@ -5,12 +5,11 @@
 //! don't perform worse than this structure.
 
 use core::num::NonZeroUsize;
-use std::fs::File;
-use std::io::{Read, Write, Seek, SeekFrom};
+use std::fs::{File, OpenOptions};
 
 use super::{Compiler, Search, WordData, WordFrequency};
 use crate::distance::{IncrementalDistance, DamerauLevenshteinDistance};
-use crate::memory::Memory;
+use crate::memory::{Memory, MemoryAccess};
 
 /// A very basic node of the trie.
 #[repr(C)]
@@ -25,24 +24,27 @@ struct MiniNode {
 
 /// Create a basic trie and write
 /// all the nodes to the files when it's done.
-///
-/// TODO: write the node one by one to the file.
 pub struct MiniCompiler {
-    //filename: String,
-
     nodes: Memory<MiniNode>
 }
 
 impl MiniCompiler {
     pub fn new(filename: &str) -> Self {
-        let mut memory = Memory::new(filename);
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(filename)
+            .expect("Can't create file");
+
+        let mut memory = Memory::new(file, MemoryAccess::ReadWrite).expect("Can't create file based memory");
+
         memory.push(MiniNode {
             data: None,
             children: [None; 256]
-        });
+        }).unwrap();
 
         MiniCompiler {
-            //filename: String::from(filename),
             nodes: memory
         }
     }
@@ -55,7 +57,8 @@ impl MiniCompiler {
                 self.nodes.push(MiniNode {
                     data: None,
                     children: [None; 256]
-                });
+                }).unwrap();
+
                 self.nodes[node_index].children[word[0] as usize] = NonZeroUsize::new(self.nodes.len() - 1);
             }
 
@@ -72,31 +75,17 @@ impl Compiler for MiniCompiler {
     }
 }
 
-/*
-impl <T> Drop for MiniCompiler<T> {
-    fn drop(&mut self) {
-        let mut file = File::create(&self.filename).expect("Can't open file");
-
-        for node in self.nodes.iter() {
-            unsafe {
-                let ptr = node as *const MiniNode<T> as *const u8;
-                let buffer = std::slice::from_raw_parts(ptr, std::mem::size_of::<MiniNode<T>>());
-
-                file.write_all(buffer).expect("Can't write to file");
-            }
-        }
-    }
-}
-*/
-
 pub struct MiniSearch {
     memory: Memory<MiniNode>
 }
 
 impl MiniSearch {
     pub fn load(filename: &str) -> Result<Self, String> {
+        let file = File::open(filename)
+            .map_err(|error| format!("Can't open file {}", error))?;
+
         Ok(MiniSearch {
-            memory: Memory::open(filename)?
+            memory: Memory::new(file, MemoryAccess::ReadOnly)?
         })
     }
 }
@@ -104,7 +93,6 @@ impl MiniSearch {
 impl <'a> Search<'a> for MiniSearch {
     fn search(&'a self, word: &'a [u8], distance: usize) -> Box<dyn Iterator<Item=WordData> + 'a> {
         Box::new(MiniSearchIterator::<'a> {
-            test: &self,
             memory: &self.memory,
             parents: vec![
                 MiniSearchIteratorIndex {
@@ -125,34 +113,11 @@ struct MiniSearchIteratorIndex {
 }
 
 struct MiniSearchIterator<'a> {
-    test: &'a MiniSearch,
     memory: &'a Memory<MiniNode>,
     parents: Vec<MiniSearchIteratorIndex>,
     distance_calculator: DamerauLevenshteinDistance<'a>,
     distance: usize
 }
-
-/*
-impl <'a, T> MiniSearchIterator<'a, T> {
-    fn read_node(&mut self, node_index: usize) -> MiniNode<T> {
-        let mini_node_size = std::mem::size_of::<MiniNode<T>>();
-
-        // Go to correct position
-        self.file.seek(SeekFrom::Start(node_index as u64 * mini_node_size as u64));
-
-        let mut buffer: MiniNode<T> = unsafe { std::mem::zeroed() };
-
-        unsafe {
-            let ptr = &mut buffer as *mut MiniNode<T> as *mut u8;
-            let slice = std::slice::from_raw_parts_mut(ptr, mini_node_size);
-
-            self.file.read_exact(slice);
-        }
-
-        buffer
-    }
-}
-*/
 
 impl <'a> Iterator for MiniSearchIterator<'a> {
     type Item=WordData;

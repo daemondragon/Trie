@@ -1,7 +1,7 @@
 extern crate trie;
 
 use std::num::NonZeroU32;
-use trie::{WordFrequency, WordData, Compiler, Search, mini::{MiniCompiler, MiniSearch}};
+use trie::{Compiler, Search, mini::{MiniCompiler, MiniSearch}};
 
 fn main() {
     println!("Hello world!");
@@ -13,7 +13,7 @@ fn main() {
         }
     }
 
-    let mut trie = MiniSearch::load("test.txt").unwrap();
+    let trie = MiniSearch::load("test.txt").unwrap();
     for distance in [0, 1, 2, 3, 4].iter() {
         for word in ["test", "a", "b", "other"].iter() {
             println!("Searching {}, distance {}", word, distance);
