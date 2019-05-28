@@ -13,4 +13,8 @@ path = "src/lib.rs"
 
 [[bin]]
 name = "trie"
-path = "src/bin.rs"
+path = "src/bin/main.rs"
+
+[[bin]]
+name = "TextMiningCompiler"
+path = "src/bin/compiler.rs"

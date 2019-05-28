@@ -34,6 +34,7 @@ pub struct Memory<T: Sized> {
     /// The file where the data need to be stored.
     file: File,
 
+    /// How the file memory can be accessed.
     access: MemoryAccess,
 
     /// A mmap data over the filename
