@@ -1,6 +1,5 @@
 extern crate trie;
 
-use std::num::NonZeroU32;
 use trie::{Compiler, mini::MiniCompiler};
 use trie::dictionary::Dictionary;
 

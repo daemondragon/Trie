@@ -2,7 +2,7 @@ use core::ops::{Deref, DerefMut};
 
 use std::os::unix::io::AsRawFd;
 use std::mem::size_of;
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::{Write, Seek, SeekFrom};
 
 // To map and unmap file
@@ -45,12 +45,28 @@ pub struct Memory<T: Sized> {
 }
 
 impl <T: Sized> Memory<T> {
-    /// Create a new memory that will be saved
-    /// to the given filename.
+    /// Create a new memory that will be saved to the given filename.
+    pub fn new(filename: &str, access: MemoryAccess) -> Result<Self, String> {
+        Memory::map_file(Memory::<T>::get_file(filename, &access, true)?, access)
+    }
+
+    /// Open a memory file from the given file.
     /// The file is expected to be created and contains
     /// the correct type.
-    pub fn new(mut file: File, access: MemoryAccess) -> Result<Self, String> {
+    pub fn open(filename: &str, access: MemoryAccess) -> Result<Self, String> {
+        Memory::map_file(Memory::<T>::get_file(filename, &access, false)?, access)
+    }
 
+    fn get_file(filename: &str, access: &MemoryAccess, allow_create: bool) -> Result<File, String> {
+        OpenOptions::new()
+            .read(true)
+            .write(*access != MemoryAccess::ReadOnly)
+            .create(allow_create)
+            .open(filename)
+            .map_err(|error| format!("Can't create new memory for \"{}\" ({})", filename, error))
+    }
+
+    fn map_file(mut file: File, access: MemoryAccess) -> Result<Self, String> {
         let fd = file.as_raw_fd();
         let len = file.seek(SeekFrom::End(0))
                       .map_err(|error| format!("Can't tell file size {}", error))? as usize;

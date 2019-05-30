@@ -5,7 +5,7 @@
 //! don't perform worse than this structure.
 
 use core::num::NonZeroUsize;
-use std::fs::{File, OpenOptions};
+use std::fmt;
 
 use super::{Compiler, Search, WordData, WordFrequency};
 use crate::distance::{IncrementalDistance, DamerauLevenshteinDistance};
@@ -19,6 +19,7 @@ struct MiniNode {
     data: Option<WordFrequency>,
 
     /// The index of the node children if they exist.
+    /// The index is non-zero as the root node can't be referenced.
     children: [Option<NonZeroUsize>; 256]
 }
 
@@ -30,14 +31,7 @@ pub struct MiniCompiler {
 
 impl MiniCompiler {
     pub fn new(filename: &str) -> Self {
-        let file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .open(filename)
-            .expect("Can't create file");
-
-        let mut memory = Memory::new(file, MemoryAccess::ReadWrite).expect("Can't create file based memory");
+        let mut memory = Memory::new(filename, MemoryAccess::ReadWrite).expect("Can't create file based memory");
 
         memory.push(MiniNode {
             data: None,
@@ -81,11 +75,8 @@ pub struct MiniSearch {
 
 impl MiniSearch {
     pub fn load(filename: &str) -> Result<Self, String> {
-        let file = File::open(filename)
-            .map_err(|error| format!("Can't open file {}", error))?;
-
         Ok(MiniSearch {
-            memory: Memory::new(file, MemoryAccess::ReadOnly)?
+            memory: Memory::open(filename, MemoryAccess::ReadOnly)?
         })
     }
 }
@@ -181,5 +172,60 @@ impl <'a> Iterator for MiniSearchIterator<'a> {
 
         // End of iterator, nothing more to do.
         None
+    }
+}
+
+
+/// Display the trie with the graphviz format so that
+/// it can be easily be viewed by the user
+impl fmt::Display for MiniCompiler {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "digraph G {{")?;
+
+        self.fmt_rec(f, 0, ' ')?;
+
+        writeln!(f, "}}")
+    }
+}
+
+impl MiniCompiler {
+    fn fmt_rec(&self, f: &mut fmt::Formatter, node_index: usize, character: char) -> fmt::Result {
+        writeln!(f, "{} [label=\"{}\"];", node_index, character)?;
+
+        for index in 0..256 {
+            if let Some(children_node_index) = self.nodes[node_index].children[index] {
+                writeln!(f, "{} -> {};", node_index, children_node_index)?;
+                self.fmt_rec(f, children_node_index.get(), index as u8 as char)?;
+            }
+        }
+
+        Ok(())
+    }
+}
+
+/// Display the trie with the graphviz format so that
+/// it can be easily be viewed by the user
+impl fmt::Display for MiniSearch {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "digraph G {{")?;
+
+        self.fmt_rec(f, 0, ' ')?;
+
+        writeln!(f, "}}")
+    }
+}
+
+impl MiniSearch {
+    fn fmt_rec(&self, f: &mut fmt::Formatter, node_index: usize, character: char) -> fmt::Result {
+        writeln!(f, "{} [label=\"{}\"];", node_index, character)?;
+
+        for index in 0..256 {
+            if let Some(children_node_index) = self.memory[node_index].children[index] {
+                writeln!(f, "{} -> {};", node_index, children_node_index)?;
+                self.fmt_rec(f, children_node_index.get(), index as u8 as char)?;
+            }
+        }
+
+        Ok(())
     }
 }

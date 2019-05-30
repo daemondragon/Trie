@@ -5,4 +5,4 @@ pub mod dictionary;
 
 mod memory;
 
-pub use trie::*;
+pub use crate::trie::*;

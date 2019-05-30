@@ -1,11 +1,10 @@
 extern crate trie;
 
 use std::num::NonZeroU32;
+
 use trie::{Compiler, Search, mini::{MiniCompiler, MiniSearch}};
 
-fn main() {
-    println!("Hello world!");
-
+fn basic_test() {
     {
         let mut compiler = MiniCompiler::new("test.txt");
         for word in ["test", "a", "b", "other"].iter() {
@@ -27,5 +26,19 @@ fn main() {
 
             println!("");
         }
+    }
+}
+
+fn main() {
+    if let Some(arg) = std::env::args().nth(1) {
+        match &*arg {
+            "graph" => {
+                let trie = MiniSearch::load("test.txt").unwrap();
+                println!("{}", trie);
+            },
+            _ => { println!("Hello world!") },
+        }
+    } else {
+        basic_test()
     }
 }
