@@ -5,12 +5,12 @@ use std::num::NonZeroU32;
 use trie::{Compiler, Search, mini::{MiniCompiler, MiniSearch}};
 
 fn basic_test() {
-    {
-        let mut compiler = MiniCompiler::new("test.txt");
-        for word in ["test", "a", "b", "other"].iter() {
-            compiler.add(word.as_bytes(), NonZeroU32::new(1).unwrap());
-        }
+    let mut compiler = MiniCompiler::new("test.txt");
+    for word in ["test", "a", "b", "other"].iter() {
+        compiler.add(word.as_bytes(), NonZeroU32::new(1).unwrap());
     }
+
+    compiler.build();
 
     let trie = MiniSearch::load("test.txt").unwrap();
     for distance in [0, 1, 2, 3, 4].iter() {

@@ -67,6 +67,10 @@ impl Compiler for MiniCompiler {
     fn add<'a>(&mut self, word: &[u8], data: WordFrequency) {
         self.add_rec(0, word, data);
     }
+
+    fn build(self) {
+        // Nothing need to be done as all the node are already written to the disk.
+    }
 }
 
 pub struct MiniSearch {

@@ -15,4 +15,6 @@ fn main() {
     for line in dictionary {
         compiler.add(line.word.as_bytes(), line.frequency);
     }
+
+    compiler.build();
 }

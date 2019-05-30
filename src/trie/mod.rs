@@ -35,6 +35,11 @@ pub struct WordData {
 pub trait Compiler {
     /// Add the word data to the search structure.
     fn add(&mut self, word: &[u8], data: WordFrequency);
+
+    /// Completely finish the compiled structure,
+    /// no words can be added later, so various
+    /// optimisation can be done in this structure.
+    fn build(self);
 }
 
 /// Perform all search on the compiled version
