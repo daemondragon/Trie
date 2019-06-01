@@ -5,7 +5,7 @@ use std::mem::size_of;
 use std::fs::{File, OpenOptions};
 use std::io::{Write, Seek, SeekFrom};
 
-// To map and unmap file
+// All C function that need to be called.
 extern {
     #[cfg_attr(all(target_os = "macos", target_arch = "x86"), link_name = "mmap$UNIX2003")]
     fn mmap(addr: *mut i8, len: usize, prot: i32, flags: i32, fd: i32, offset: isize) -> *mut i8;

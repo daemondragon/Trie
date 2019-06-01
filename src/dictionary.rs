@@ -57,7 +57,7 @@ impl Iterator for DictionaryIterator {
             .next()
             .map(|line| {
                 let line = line.expect("Could not read line");
-                let mut splitted = line.split("\t");
+                let mut splitted = line.split_whitespace();
 
                 DictionaryLine {
                     word: splitted.next().expect("No word in the line").into(),
