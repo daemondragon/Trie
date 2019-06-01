@@ -194,7 +194,11 @@ impl fmt::Display for MiniCompiler {
 
 impl MiniCompiler {
     fn fmt_rec(&self, f: &mut fmt::Formatter, node_index: usize, character: char) -> fmt::Result {
-        writeln!(f, "{} [label=\"{}\"];", node_index, character)?;
+        writeln!(f, "{} [label=\"{}\", color={}, style=filled];",
+            node_index,
+            character,
+            if self.nodes[node_index].data.is_some() { "green" } else { "white" }
+        )?;
 
         for index in 0..256 {
             if let Some(children_node_index) = self.nodes[node_index].children[index] {
@@ -221,7 +225,11 @@ impl fmt::Display for MiniSearch {
 
 impl MiniSearch {
     fn fmt_rec(&self, f: &mut fmt::Formatter, node_index: usize, character: char) -> fmt::Result {
-        writeln!(f, "{} [label=\"{}\"];", node_index, character)?;
+        writeln!(f, "{} [label=\"{}\", color={}, style=filled];",
+            node_index,
+            character,
+            if self.memory[node_index].data.is_some() { "green" } else { "white" }
+        )?;
 
         for index in 0..256 {
             if let Some(children_node_index) = self.memory[node_index].children[index] {
