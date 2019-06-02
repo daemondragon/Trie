@@ -5,9 +5,8 @@
 //! don't perform worse than this structure.
 
 use core::num::NonZeroUsize;
-use std::fmt;
 
-use super::{Compiler, Search, WordData, WordFrequency};
+use crate::{Compiler, Search, Information, WordData, WordFrequency};
 use crate::distance::{IncrementalDistance, DamerauLevenshteinDistance};
 use crate::memory::{Memory, MemoryAccess};
 
@@ -180,64 +179,73 @@ impl <'a> Iterator for MiniSearchIterator<'a> {
 }
 
 
-/// Display the trie with the graphviz format so that
-/// it can be easily be viewed by the user
-impl fmt::Display for MiniCompiler {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "digraph G {{")?;
-
-        self.fmt_rec(f, 0, ' ')?;
-
-        writeln!(f, "}}")
+impl <'a> Information<'a> for MiniSearch {
+    fn words(&self) -> usize {
+        self.words_rec(0)
     }
-}
 
-impl MiniCompiler {
-    fn fmt_rec(&self, f: &mut fmt::Formatter, node_index: usize, character: char) -> fmt::Result {
-        writeln!(f, "{} [label=\"{}\", color={}, style=filled];",
-            node_index,
-            character,
-            if self.nodes[node_index].data.is_some() { "green" } else { "white" }
-        )?;
-
-        for index in 0..256 {
-            if let Some(children_node_index) = self.nodes[node_index].children[index] {
-                writeln!(f, "{} -> {};", node_index, children_node_index)?;
-                self.fmt_rec(f, children_node_index.get(), index as u8 as char)?;
-            }
-        }
-
-        Ok(())
+    fn nodes(&self) -> usize {
+        self.memory.len()
     }
-}
 
-/// Display the trie with the graphviz format so that
-/// it can be easily be viewed by the user
-impl fmt::Display for MiniSearch {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "digraph G {{")?;
+    fn height(&self) -> usize {
+        self.height_rec(0)
+    }
 
-        self.fmt_rec(f, 0, ' ')?;
+    fn max_lenght(&self) -> usize {
+        // Node don't compress path, so the longest word's length
+        // is the height of the trie
+        self.height()
+    }
 
-        writeln!(f, "}}")
+    fn graph(&self) {
+        println!("digraph G {{");
+
+        self.graph_rec(0, ' ');
+
+        println!("}}");
     }
 }
 
 impl MiniSearch {
-    fn fmt_rec(&self, f: &mut fmt::Formatter, node_index: usize, character: char) -> fmt::Result {
-        writeln!(f, "{} [label=\"{}\", color={}, style=filled];",
-            node_index,
-            character,
-            if self.memory[node_index].data.is_some() { "green" } else { "white" }
-        )?;
+    fn words_rec(&self, node_index: usize) -> usize {
+        let count: usize = if self.memory[node_index].data.is_some() { 1 } else { 0 };
+
+        let children_count: usize = self.memory[node_index]
+                                        .children
+                                        .iter()
+                                        .filter(|child| child.is_some())
+                                        .map(|child| self.words_rec(child.unwrap().get()))
+                                        .sum();
+
+        count + children_count
+    }
+
+    fn height_rec(&self, node_index: usize) -> usize {
+        1 + self.memory[node_index].children
+                .iter()
+                .filter(|child| child.is_some())
+                .map(|child| self.height_rec(child.unwrap().get()))
+                .max()
+                .unwrap_or(0)
+    }
+
+    fn graph_rec(&self, node_index: usize, character: char) {
+        print!("{} [", node_index);
+
+        if let Some(frequency) = self.memory[node_index].data {
+            print!("label=\"{}\n({})\", color=green, style=filled", character, frequency.get());
+        } else {
+            print!("label=\"{}\"", character);
+        }
+
+        println!("];");
 
         for index in 0..256 {
             if let Some(children_node_index) = self.memory[node_index].children[index] {
-                writeln!(f, "{} -> {};", node_index, children_node_index)?;
-                self.fmt_rec(f, children_node_index.get(), index as u8 as char)?;
+                println!("{} -> {};", node_index, children_node_index);
+                self.graph_rec(children_node_index.get(), index as u8 as char);
             }
         }
-
-        Ok(())
     }
 }
