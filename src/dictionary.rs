@@ -60,10 +60,10 @@ impl Iterator for DictionaryIterator {
                 let mut splitted = line.split_whitespace();
 
                 DictionaryLine {
-                    word: splitted.next().expect("No word in the line").into(),
+                    word: splitted.next().expect(&format!("No word in the line: \"{}\"", line)).into(),
                     frequency: NonZeroU32::new(
                         str::parse(
-                            splitted.next().expect("No frequency in the line")
+                            splitted.next().expect(&format!("No frequency in the line: \"{}\"", line))
                         ).expect("Second word is not a number")
                     ).expect("Frequency is not non zero")
                 }

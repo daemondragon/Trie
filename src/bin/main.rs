@@ -6,6 +6,7 @@ use core::cmp::max;
 
 use trie::{Compiler, Search, Information, trie::{MiniCompiler, MiniSearch}};
 use trie::distance::{IncrementalDistance, DamerauLevenshteinDistance};
+use trie::dictionary::{Dictionary, DictionaryLine};
 
 fn basic_test() {
     let mut compiler = MiniCompiler::new("test.txt");
@@ -37,44 +38,49 @@ fn basic_test() {
     }
 }
 
-fn bench(trie: &Search) {
-    for test_filename in ["../words.txt"].iter() {
-        println!("Testing {}", test_filename);
-        let words_count = 1;//TODO: fix this
+fn bench() {
+    for amount in [1_000, 10_000, 100_000].iter() {
+        let trie_filename = format!("words_{}.bin", amount);
+        println!("Testing trie \"{}\"", trie_filename);
+        let trie = MiniSearch::load(&trie_filename).unwrap();
 
-        let mut levenshtein = DamerauLevenshteinDistance::new(&[]);
+        // Starting by the good query first as they are more representative
+        // of the real performance of the algorithm.
+        for good_query_ratio in [100, 90, 75, 50, 25, 10, 0].iter() {
+            let query_filename = format!("../split/query_{}_{}_{}.txt", amount, good_query_ratio, 100 - good_query_ratio);
+            println!("Testing query file \"{}\"", query_filename);
 
-        for distance in [0, 1, 2].iter() {
-            let mut times: Vec<(u128, usize)> = (0..10).map(|_| {
-                let start = Instant::now();
+            // Loading all the query once to prevent loading this impacting the result.
+            let lines: Vec<DictionaryLine> = Dictionary::new(&query_filename).unwrap().into_iter().collect();
+            let mut levenshtein = DamerauLevenshteinDistance::new(&[]);
 
-                // TODO: put in loop of all words.
-                let word = "hello";
-                levenshtein.reset(word.as_bytes());
-                let amount = trie.search(&mut levenshtein, *distance).count();
+            for distance in [0, 1, 2].iter() {
+                let mut times: Vec<u128> = (0..10).map(|_| {
+                    let start = Instant::now();
 
+                    for line in lines.iter() {
+                        levenshtein.reset(line.word.as_bytes());
+                        trie.search(&mut levenshtein, *distance).count();
+                    }
 
-                (start.elapsed().as_millis(), amount)
-            }).collect();
+                    start.elapsed().as_millis()
+                }).collect();
 
-            times.sort_by(|a, b| a.0.cmp(&b.0));
-            // Removing outlier.
-            let times = &times[2..times.len() - 2];
+                times.sort();
+                // Removing outlier.
+                let times = &times[2..times.len() - 2];
 
-            let median = times[times.len() / 2];
-            let median_time = median.0;
-            let min_time = times[0].0;
-            let max_time = times[times.len() - 1].0;
+                let median = times[times.len() / 2];
+                let min_time = times[0];
+                let max_time = times[times.len() - 1];
 
-            assert!(times.iter().all(|x| x.1 == median.1), "Inconsistent result length");
-
-            println!("distance: {}, time: {} ms (+- {} ms) => {} query/sec, result count: {}",
-                distance,
-                median_time,
-                max(median_time - min_time, max_time - median_time),
-                words_count * 1000 / max(1, median_time),
-                median.1
-            );
+                println!("distance: {}, time: {} ms (+- {} ms) => {} query/sec",
+                    distance,
+                    median,
+                    max(median - min_time, max_time - median),
+                    lines.len() as u128 * 1000 / max(1, median)
+                );
+            }
         }
     }
 }
@@ -91,7 +97,7 @@ fn main() {
                 println!("height: {}", trie.height());
                 println!("max_lenght: {}", trie.max_lenght());
             }
-            "bench" => bench(&trie),
+            "bench" => bench(),
 
             _ => { println!("Hello world!") },
         }
