@@ -10,6 +10,9 @@ use std::cmp::min;
 /// In this trait, words can be seen as a stack of character that can freely
 /// be added and removed.
 pub trait IncrementalDistance {
+    /// Get the word that is being matched against all the other one.
+    fn word(&self) -> &[u8];
+
     /// Add a new character to the previous word
     /// and return the computed distance.
     fn push(&mut self, value: u8) -> usize;
@@ -21,6 +24,11 @@ pub trait IncrementalDistance {
 
     /// Get the current word that is being matched against the word.
     fn current(&self) -> &[u8];
+
+    /// Reset the distance to a clean state to calculate the distance
+    /// with the given word. This is used to allows reusing the buffer
+    /// for multiple iterations.
+    fn reset(&mut self, word: &[u8]);
 }
 
 /// Calculate the distance between a word and all words present in a trie.
@@ -33,9 +41,9 @@ pub trait IncrementalDistance {
 /// of distance will be calculated and this version allows to efficiently
 /// cache the computation when used in a trie.
 #[derive(Debug, Clone)]
-pub struct DamerauLevenshteinDistance<'a> {
+pub struct DamerauLevenshteinDistance {
     /// The word that need to be matched against all the other one.
-    word: &'a[u8],
+    word: Vec<u8>,
     /// All the characters that have been previously added and not popped.
     /// They are needed for the transposition part of the algorithm.
     current: Vec<u8>,
@@ -47,9 +55,9 @@ pub struct DamerauLevenshteinDistance<'a> {
     distances: Vec<usize>
 }
 
-impl <'a> DamerauLevenshteinDistance<'a> {
+impl DamerauLevenshteinDistance {
     /// Create a new distance calculator for the given word.
-    pub fn new(word: &'a[u8]) -> Self {
+    pub fn new(word: &[u8]) -> Self {
         DamerauLevenshteinDistance::new_with_words_len(word, word.len())
     }
 
@@ -59,20 +67,24 @@ impl <'a> DamerauLevenshteinDistance<'a> {
     /// distance with the original word.
     /// Doing so allows to pre-reserve the capacity of the distance matrix
     /// so that no other resize is needed.
-    pub fn new_with_words_len(word: &'a[u8], max_words_len: usize) -> Self {
+    pub fn new_with_words_len(word: &[u8], max_words_len: usize) -> Self {
         let mut matrix = Vec::with_capacity((word.len() + 1) * (max_words_len + 1));
         (0..=word.len())
             .for_each(|value| matrix.push(value));
 
         DamerauLevenshteinDistance {
-            word: word,
+            word: word.into(),
             current: Vec::with_capacity(max_words_len),
             distances: matrix
         }
     }
 }
 
-impl <'a> IncrementalDistance for DamerauLevenshteinDistance<'a> {
+impl IncrementalDistance for DamerauLevenshteinDistance {
+
+    fn word(&self) -> &[u8] {
+        &self.word
+    }
 
     fn push(&mut self, value: u8) -> usize {
         // Calculating all matrix offset at once.
@@ -120,6 +132,19 @@ impl <'a> IncrementalDistance for DamerauLevenshteinDistance<'a> {
 
     fn current(&self) -> &[u8] {
         self.current.as_slice()
+    }
+
+    fn reset(&mut self, word: &[u8]) {
+        // Clear all buffer
+        self.distances.clear();
+        self.current.clear();
+        self.word.clear();
+
+        // Reset the distance matrix
+        (0..=word.len()).for_each(|value| self.distances.push(value));
+
+        // Set the new wanted word
+        self.word.extend_from_slice(word);
     }
 }
 
@@ -173,5 +198,35 @@ mod tests {
                 distance_calculator
             );
         }
+    }
+
+    #[test]
+    fn reset() {
+        let first_word = "hello";
+        let second_word = "world";
+
+        let mut distance_calculator = DamerauLevenshteinDistance::new(first_word.as_bytes());
+        let calculated_distance = first_word
+                .as_bytes()
+                .iter()
+                .map(|value| distance_calculator.push(*value))
+                .last()
+                .unwrap();
+
+        // This is the same word
+        assert_eq!(0, calculated_distance);
+
+        // Reseting the distance calculator
+        distance_calculator.reset(second_word.as_bytes());
+
+        let calculated_distance = first_word
+                .as_bytes()
+                .iter()
+                .map(|value| distance_calculator.push(*value))
+                .last()
+                .unwrap();
+
+        // The matching word have been changed meanwhile
+        assert_ne!(0, calculated_distance);
     }
 }

@@ -2,10 +2,13 @@ pub mod bloom;
 pub mod distance;
 pub mod trie;
 pub mod dictionary;
+pub mod limit;
 
 mod memory;
 
 use core::num::NonZeroU32;
+
+use distance::IncrementalDistance;
 
 /// For the subject, each word's data is it's frequency.
 /// Note that the frequency of the word is not representative
@@ -54,20 +57,24 @@ pub trait Compiler {
 /// the structure can't be stored in RAM.
 ///
 /// Note that the RAM usage can't be more than 512M.
-pub trait Search<'a> {
+pub trait Search {
     /// Search for all the words under some given distance
     /// of the wanted word and return an iterator on all found words.
+    ///
+    /// The given distance must be "clean": It must just have been created
+    /// or reseted before this call.
+    /// Not doing that may produce unexpected behavior.
     ///
     /// This function must be capable of doing:
     /// - 3000 queries/seconds with a 0 distance.
     /// -  300 queries/seconds with a 1 distance.
     /// -   30 queries/seconds with a 2 distance.
-    fn search(&'a self, word: &'a [u8], distance: usize) -> Box<dyn Iterator<Item=WordData> + 'a>;
+    fn search(&self, distance: &mut IncrementalDistance, max_distance: usize) -> Box<dyn Iterator<Item=WordData>>;
 }
 
 /// Get information about a search structure
 /// for easy visualisation and usefull information.
-pub trait Information<'a> : Search<'a> {
+pub trait Information : Search {
     /// Get the number of words present in the structure
     fn words(&self) -> usize;
 
@@ -87,41 +94,4 @@ pub trait Information<'a> : Search<'a> {
     ///
     /// The display must be done on the standart output.
     fn graph(&self);
-}
-
-pub mod limit {
-    extern {
-        #[cfg_attr(all(target_os = "macos", target_arch = "x86"), link_name = "setrlimit$UNIX2003")]
-        fn setrlimit(resource: i32, rlim: *const rlimit) -> i32;
-    }
-
-    #[repr(C)]
-    struct rlimit {
-        rlim_cur: u64,
-        rlim_max: u64,
-    }
-
-    /// All limits that can be placed on the process.
-    /// A limit work affect the process even after going out of scope,
-    /// and can't be reverted (other than applying another bigger limit).
-    pub enum Limit {
-        /// How many RAM memory in bytes the process can use.
-        /// The quantity of virtual memory is not affected by this.
-        Memory(u64),
-        /// How much CPU times in seconds the process can use.
-        CPUTime(u64),
-    }
-
-    impl Limit {
-        /// Apply the limit and return if it could be applied or not.
-        pub fn apply(self) -> bool {
-            let (max, kind) = match self {
-                Limit::Memory(value)  => (value, 2/* RLIMIT_DATA */),
-                Limit::CPUTime(value) => (value, 0/* RLIMIT_CPU */),
-            };
-
-            let limit = rlimit { rlim_cur: max, rlim_max: max };
-            unsafe { setrlimit(kind, &limit) == 0 }
-        }
-    }
 }

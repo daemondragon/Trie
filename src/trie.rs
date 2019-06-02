@@ -7,7 +7,7 @@
 use core::num::NonZeroUsize;
 
 use crate::{Compiler, Search, Information, WordData, WordFrequency};
-use crate::distance::{IncrementalDistance, DamerauLevenshteinDistance};
+use crate::distance::IncrementalDistance;
 use crate::memory::{Memory, MemoryAccess};
 
 /// A very basic node of the trie.
@@ -84,33 +84,38 @@ impl MiniSearch {
     }
 }
 
-impl <'a> Search<'a> for MiniSearch {
-    fn search(&'a self, word: &'a [u8], distance: usize) -> Box<dyn Iterator<Item=WordData> + 'a> {
-        Box::new(MiniSearchIterator::<'a> {
+impl Search for MiniSearch {
+    fn search(&self, distance: &mut IncrementalDistance, max_distance: usize) -> Box<dyn Iterator<Item=WordData>> {
+        let mini_search = MiniSearchIterator {
             memory: &self.memory,
             parents: vec![
                 MiniSearchIteratorIndex {
                     node_index: 0,
-                    next_word_index: 0
+                    next_word_index: 0,
+                    distance: distance.word().len()
                 }
             ],
-            distance_calculator: DamerauLevenshteinDistance::new(word),
-            distance: distance
-        })
+            distance_calculator: distance,
+            max_distance: max_distance
+        };
+
+        Box::new(mini_search.collect::<Vec<WordData>>().into_iter())
     }
 }
 
 #[derive(Debug)]
 struct MiniSearchIteratorIndex {
     node_index: usize,
-    next_word_index: usize
+    next_word_index: usize,
+    // What was the distance before for early stopping.
+    distance: usize
 }
 
 struct MiniSearchIterator<'a> {
     memory: &'a Memory<MiniNode>,
     parents: Vec<MiniSearchIteratorIndex>,
-    distance_calculator: DamerauLevenshteinDistance<'a>,
-    distance: usize
+    distance_calculator: &'a mut IncrementalDistance,
+    max_distance: usize
 }
 
 impl <'a> Iterator for MiniSearchIterator<'a> {
@@ -143,14 +148,11 @@ impl <'a> Iterator for MiniSearchIterator<'a> {
             self.parents.last_mut()?.next_word_index += 1;
 
 
-            // Distance is too big, retrying with the next node.
-            /*
-            TODO: fix this for small word.
-            if calculated_distance > self.distance {
+            // Distance is too big, retrying with the next node (and distance is increasing, not decreasing).
+            if calculated_distance > self.max_distance && calculated_distance > self.parents.last()?.distance {
                 self.distance_calculator.pop();
                 continue;
             }
-            */
 
             // Go to the next node.
             let children_node_index = node.children[self.parents.last()?.next_word_index - 1].unwrap().get();
@@ -158,11 +160,12 @@ impl <'a> Iterator for MiniSearchIterator<'a> {
 
             self.parents.push(MiniSearchIteratorIndex {
                 node_index: children_node_index,
-                next_word_index: 0
+                next_word_index: 0,
+                distance: calculated_distance,
             });
 
             // This is a valid node, return it.
-            if calculated_distance <= self.distance {
+            if calculated_distance <= self.max_distance {
                 if let Some(data) = &children_node.data {
                     return Some(WordData {
                         word: self.distance_calculator.current().to_vec(),
@@ -179,7 +182,7 @@ impl <'a> Iterator for MiniSearchIterator<'a> {
 }
 
 
-impl <'a> Information<'a> for MiniSearch {
+impl Information for MiniSearch {
     fn words(&self) -> usize {
         self.words_rec(0)
     }
