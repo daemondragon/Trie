@@ -31,7 +31,7 @@ pub struct WordData {
     /// word saving format thaty allows to compact words.
     pub word: Vec<u8>,
     /// The associated data with the given word.
-    pub data: WordFrequency,
+    pub frequency: WordFrequency,
     /// The distance from the word with the wanted
     pub distance: usize
 }
@@ -48,7 +48,7 @@ impl Ord for WordData {
         // then by frequency (decreasing)
         // then by word (lexicographics)
         self.distance.cmp(&other.distance)
-            .then(other.data.cmp(&self.data))
+            .then(other.frequency.cmp(&self.frequency))
             .then(self.word.cmp(&other.word))
     }
 }
@@ -60,8 +60,8 @@ impl Ord for WordData {
 /// The compiler is known to have the file fully saved
 /// when the Drop trait is called.
 pub trait Compiler {
-    /// Add the word data to the search structure.
-    fn add(&mut self, word: &[u8], data: WordFrequency);
+    /// Add the word and it's frequency to the search structure.
+    fn add(&mut self, word: &[u8], frequency: WordFrequency);
 
     /// Completely finish the compiled structure,
     /// no words can be added later, so various

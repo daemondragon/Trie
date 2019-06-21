@@ -11,7 +11,7 @@ fn write_word_data(stdout: &mut StdoutLock, data: &WordData)
 {
     let word = unsafe { from_utf8_unchecked(&data.word) };
 
-    write!(stdout, "{{\"word\":\"{}\",\"freq\":{},\"distance\":{}}}", word, data.data, data.distance).unwrap();
+    write!(stdout, "{{\"word\":\"{}\",\"freq\":{},\"distance\":{}}}", word, data.frequency, data.distance).unwrap();
 }
 
 fn main() {

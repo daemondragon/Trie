@@ -13,9 +13,9 @@ use crate::memory::{Memory, MemoryAccess};
 /// A very basic node of the trie.
 #[repr(C)]
 struct MiniNode {
-    /// The associated data of the word,
+    /// The associated frequency of the word,
     /// if the node represent a valid word.
-    data: Option<WordFrequency>,
+    frequency: Option<WordFrequency>,
 
     /// The index of the node children if they exist.
     /// The index is non-zero as the root node can't be referenced.
@@ -33,7 +33,7 @@ impl MiniCompiler {
         let mut memory = Memory::new(filename, MemoryAccess::ReadWrite).expect("Can't create file based memory");
 
         memory.push(MiniNode {
-            data: None,
+            frequency: None,
             children: [None; 256]
         }).unwrap();
 
@@ -42,29 +42,29 @@ impl MiniCompiler {
         }
     }
 
-    fn add_rec<'a>(&mut self, node_index: usize, word: &[u8], data: WordFrequency) {
+    fn add_rec<'a>(&mut self, node_index: usize, word: &[u8], frequency: WordFrequency) {
         if !word.is_empty() {
             // In the middle of the word.
             if self.nodes[node_index].children[word[0] as usize].is_none() {
                 // Node absent, add it and treat it as added.
                 self.nodes.push(MiniNode {
-                    data: None,
+                    frequency: None,
                     children: [None; 256]
                 }).unwrap();
 
                 self.nodes[node_index].children[word[0] as usize] = NonZeroUsize::new(self.nodes.len() - 1);
             }
 
-            self.add_rec(self.nodes[node_index].children[word[0] as usize].unwrap().get(), &word[1..], data);
+            self.add_rec(self.nodes[node_index].children[word[0] as usize].unwrap().get(), &word[1..], frequency);
         } else {
-            self.nodes[node_index].data = Some(data);
+            self.nodes[node_index].frequency = Some(frequency);
         }
     }
 }
 
 impl Compiler for MiniCompiler {
-    fn add<'a>(&mut self, word: &[u8], data: WordFrequency) {
-        self.add_rec(0, word, data);
+    fn add<'a>(&mut self, word: &[u8], frequency: WordFrequency) {
+        self.add_rec(0, word, frequency);
     }
 
     fn build(self) {
@@ -86,14 +86,14 @@ impl MiniSearch {
     fn exact_search(&self, node_index: usize, word: &[u8], full_word: &[u8]) -> Option<WordData> {
         if let Some(children_node_index) = self.memory[node_index].children[word[0] as usize] {
             if word.len() <= 1 {
-                if let Some(data) = self.memory[children_node_index.get()].data {
+                if let Some(frequency) = self.memory[children_node_index.get()].frequency {
                     Some(WordData {
                         word: full_word.into(),
-                        data: data,
+                        frequency: frequency,
                         distance: 0
                     })
                 } else {
-                    // No data (word not present)
+                    // No frequency (word not present)
                     None
                 }
             } else {
@@ -194,10 +194,10 @@ impl <'a> Iterator for MiniSearchIterator<'a> {
 
             // This is a valid node, return it.
             if calculated_distance <= self.max_distance {
-                if let Some(data) = &children_node.data {
+                if let Some(frequency) = &children_node.frequency {
                     return Some(WordData {
                         word: self.distance_calculator.current().to_vec(),
-                        data: *data,
+                        frequency: *frequency,
                         distance: calculated_distance
                     });
                 }
@@ -239,7 +239,7 @@ impl Information for MiniSearch {
 
 impl MiniSearch {
     fn words_rec(&self, node_index: usize) -> usize {
-        let count: usize = if self.memory[node_index].data.is_some() { 1 } else { 0 };
+        let count: usize = if self.memory[node_index].frequency.is_some() { 1 } else { 0 };
 
         let children_count: usize = self.memory[node_index]
                                         .children
@@ -263,7 +263,7 @@ impl MiniSearch {
     fn graph_rec(&self, node_index: usize, character: char) {
         print!("{} [", node_index);
 
-        if let Some(frequency) = self.memory[node_index].data {
+        if let Some(frequency) = self.memory[node_index].frequency {
             print!("label=\"{}\n({})\", color=green, style=filled", character, frequency.get());
         } else {
             print!("label=\"{}\"", character);

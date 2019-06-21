@@ -28,7 +28,7 @@ fn basic_test() {
             for word_data in trie.search(&mut levenshtein, *distance) {
                 println!("word: {}, frequency: {}, distance: {}",
                     String::from_utf8_lossy(&word_data.word),
-                    word_data.data,
+                    word_data.frequency,
                     word_data.distance
                 );
             }
