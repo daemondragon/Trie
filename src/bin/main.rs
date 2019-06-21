@@ -46,7 +46,7 @@ fn bench() {
 
         // Starting by the good query first as they are more representative
         // of the real performance of the algorithm.
-        for good_query_ratio in [100, 90, 75, 50, 25, 10, 0].iter() {
+        for good_query_ratio in [100/*, 90, 75, 50, 25, 10, 0*/].iter() {
             let query_filename = format!("../split/query_{}_{}_{}.txt", amount, good_query_ratio, 100 - good_query_ratio);
             println!("Testing query file \"{}\"", query_filename);
 
@@ -60,7 +60,9 @@ fn bench() {
 
                     for line in lines.iter() {
                         levenshtein.reset(line.word.as_bytes());
-                        trie.search(&mut levenshtein, *distance).count();
+                        let count = trie.search(&mut levenshtein, *distance).count();
+
+                        assert!((*good_query_ratio != 100 || *distance != 0) || count == 1, "Expected to have found a word");
                     }
 
                     start.elapsed().as_millis()
@@ -87,7 +89,7 @@ fn bench() {
 
 fn main() {
     if let Some(arg) = std::env::args().nth(1) {
-        let trie = MiniSearch::load("small.bin").unwrap();
+        let trie = MiniSearch::load("words_1000.bin").unwrap();
 
         match &*arg {
             "graph" => trie.graph(),

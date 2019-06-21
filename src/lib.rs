@@ -6,6 +6,7 @@ pub mod limit;
 mod memory;
 
 use core::num::NonZeroU32;
+use core::cmp::Ordering;
 
 use distance::IncrementalDistance;
 
@@ -21,6 +22,7 @@ pub type WordFrequency = NonZeroU32;
 /// The basic structure that need to be used for each search structure.
 /// Each struture must be capable of storing the associated
 /// data with it so that it can be retrieve without any problem
+#[derive(PartialEq, Eq)]
 pub struct WordData {
     /// A slice of the word.
     /// Doesn't directly store the word
@@ -31,6 +33,23 @@ pub struct WordData {
     pub data: WordFrequency,
     /// The distance from the word with the wanted
     pub distance: usize
+}
+
+impl PartialOrd for WordData {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for WordData {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // Order by distance (increasing)
+        // then by frequency (decreasing)
+        // then by word (lexicographics)
+        self.distance.cmp(&other.distance)
+            .then(other.data.cmp(&self.data))
+            .then(self.word.cmp(&other.word))
+    }
 }
 
 /// Compile the search structure to the disk.

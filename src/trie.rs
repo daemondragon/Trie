@@ -82,24 +82,52 @@ impl MiniSearch {
             memory: Memory::open(filename, MemoryAccess::ReadOnly)?
         })
     }
+
+    fn exact_search(&self, node_index: usize, word: &[u8], full_word: &[u8]) -> Option<WordData> {
+        if let Some(children_node_index) = self.memory[node_index].children[word[0] as usize] {
+            if word.len() <= 1 {
+                if let Some(data) = self.memory[children_node_index.get()].data {
+                    Some(WordData {
+                        word: full_word.into(),
+                        data: data,
+                        distance: 0
+                    })
+                } else {
+                    // No data (word not present)
+                    None
+                }
+            } else {
+                // Need to keep searching deeper
+                self.exact_search(children_node_index.get(), &word[1..], full_word)
+            }
+        } else {
+            None// No children leading to the wanted node
+        }
+    }
 }
 
 impl Search for MiniSearch {
     fn search(&self, distance: &mut IncrementalDistance, max_distance: usize) -> Box<dyn Iterator<Item=WordData>> {
-        let mini_search = MiniSearchIterator {
-            memory: &self.memory,
-            parents: vec![
-                MiniSearchIteratorIndex {
-                    node_index: 0,
-                    next_word_index: 0,
-                    distance: distance.word().len()
-                }
-            ],
-            distance_calculator: distance,
-            max_distance: max_distance
-        };
+        if max_distance == 0 {
+            Box::new(self.exact_search(0, distance.word(), distance.word()).into_iter())
+        } else {
+            let mini_search = MiniSearchIterator {
+                memory: &self.memory,
+                parents: vec![
+                    MiniSearchIteratorIndex {
+                        node_index: 0,
+                        next_word_index: 0,
+                        distance: distance.word().len()
+                    }
+                ],
+                distance_calculator: distance,
+                max_distance: max_distance
+            };
 
-        Box::new(mini_search.collect::<Vec<WordData>>().into_iter())
+            let mut result = mini_search.collect::<Vec<WordData>>();
+            result.sort();
+            Box::new(result.into_iter())
+        }
     }
 }
 
@@ -180,7 +208,6 @@ impl <'a> Iterator for MiniSearchIterator<'a> {
         None
     }
 }
-
 
 impl Information for MiniSearch {
     fn words(&self) -> usize {

@@ -17,3 +17,7 @@ path = "src/bin/main.rs"
 [[bin]]
 name = "TextMiningCompiler"
 path = "src/bin/compiler.rs"
+
+[[bin]]
+name = "TextMiningApp"
+path = "src/bin/searcher.rs"
