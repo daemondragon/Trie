@@ -67,6 +67,18 @@ impl DiskMemory {
         Ok(memory)
     }
 
+    pub fn len(&self) -> usize {
+        self.length
+    }
+
+    pub fn data(&self) -> *const u8 {
+        self.data
+    }
+
+    pub fn data_mut(&self) -> *mut u8 {
+        self.data
+    }
+
     /// Add a new value to the end of the memory
     /// Note that the insertion can fail in case
     /// the object could not be added at the end of the file.

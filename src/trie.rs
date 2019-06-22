@@ -231,7 +231,7 @@ impl Information for MiniSearch {
     fn graph(&self) {
         println!("digraph G {{");
 
-        self.graph_rec(0, ' ');
+        self.graph_rec(0);
 
         println!("}}");
     }
@@ -260,21 +260,21 @@ impl MiniSearch {
                 .unwrap_or(0)
     }
 
-    fn graph_rec(&self, node_index: usize, character: char) {
+    fn graph_rec(&self, node_index: usize) {
         print!("{} [", node_index);
 
         if let Some(frequency) = self.memory[node_index].frequency {
-            print!("label=\"{}\n({})\", color=green, style=filled", character, frequency.get());
+            print!("label=\"{}\", color=green, style=filled", frequency.get());
         } else {
-            print!("label=\"{}\"", character);
+            print!("label=\"\"");
         }
 
         println!("];");
 
         for index in 0..256 {
             if let Some(children_node_index) = self.memory[node_index].children[index] {
-                println!("{} -> {};", node_index, children_node_index);
-                self.graph_rec(children_node_index.get(), index as u8 as char);
+                println!("{} -> {} [label=\"{}\"];", node_index, children_node_index, index as u8 as char);
+                self.graph_rec(children_node_index.get());
             }
         }
     }

@@ -4,6 +4,9 @@
 
 use crate::WordFrequency;
 
+pub mod compiler;
+pub use compiler::ArtCompiler;
+
 use core::num::NonZeroUsize;
 
 /// All differents nodes that exist

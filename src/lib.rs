@@ -79,6 +79,7 @@ pub trait Compiler {
 pub trait Search {
     /// Search for all the words under some given distance
     /// of the wanted word and return an iterator on all found words.
+    /// The returned values must be correctly ordered.
     ///
     /// The given distance must be "clean": It must just have been created
     /// or reseted before this call.
