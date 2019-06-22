@@ -14,6 +14,7 @@ use core::num::NonZeroUsize;
 /// the purpose of having multiple nodes (saving space).
 #[derive(PartialEq, Eq)]
 enum NodeKind {
+    Node0,
     Node4,
     Node16,
     Node48,
@@ -55,8 +56,19 @@ struct NodeHeader {
 /// while still using the same space.
 pub type NodeOffset = NonZeroUsize;
 
+/// A leaf node containing zero children.
+/// This node is usefull as for the provided dictionnary,
+/// more than 90% of the words end up in a lead node
+/// (very few words are prefix of other words)
+/// This node does allows to save a large amount of storage.
+#[repr(C)]
+struct Node0 {
+    /// The header that contains general information about the node.
+    /// In this case, header.kind is always NodeKind::Node0
+    header: NodeHeader,
+}
+
 /// A node that can only contains up to 4 chldren
-/// This is the smallest node possible.
 /// Packed is used so that it remove the trailing space for alignment.
 /// It does allows to have a better space usage
 #[repr(C, packed)]
@@ -64,11 +76,11 @@ struct Node4 {
     /// The header that contains general information about the node.
     /// In this case, header.kind is always NodeKind::Node4
     header: NodeHeader,
+    /// An offset where the node's children are located
+    pointers: [Option<NodeOffset>; 4],
     /// The key to the next node (the represented character)
     /// For the key[i], the pointed child is located at pointers[i]
-    keys: [u8; 4],
-    /// An offset where the node's children are located
-    pointers: [Option<NodeOffset>; 4]
+    keys: [u8; 4]
 }
 
 /// A node that can only contains up to 16 chlidren
@@ -122,6 +134,7 @@ mod tests {
         assert_eq!(size_of::<NodeKind>(), 1);
         assert_eq!(size_of::<NodeHeader>(), 16);
 
+        assert_eq!(size_of::<Node0>(), 16);
         assert_eq!(size_of::<Node4>(), 52);
         assert_eq!(size_of::<Node16>(), 160);
         assert_eq!(size_of::<Node48>(), 656);
