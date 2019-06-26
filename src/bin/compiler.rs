@@ -1,6 +1,6 @@
 extern crate trie;
 
-use trie::{Compiler, trie::MiniCompiler};
+use trie::{Compiler, trie::MiniCompiler, art::ArtCompiler};
 use trie::dictionary::Dictionary;
 use trie::limit::Limit;
 
@@ -12,9 +12,9 @@ fn main() {
         &std::env::args().nth(1).expect("Missing dictionary filename as first argument")
     ).expect("Could not load dictionary file");
 
-    let mut compiler = MiniCompiler::new(
+    let mut compiler = ArtCompiler::new(
         &std::env::args().nth(2).expect("Missing compiled file as second argument")
-    );
+    ).unwrap();
 
     for line in dictionary {
         compiler.add(line.word.as_bytes(), line.frequency);

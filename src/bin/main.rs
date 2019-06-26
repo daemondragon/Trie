@@ -4,7 +4,7 @@ use std::num::NonZeroU32;
 use std::time::Instant;
 use core::cmp::max;
 
-use trie::{Compiler, Search, Information, trie::{MiniCompiler, MiniSearch}};
+use trie::{Compiler, Search, Information, trie::{MiniCompiler, MiniSearch}, art::{ArtCompiler, ArtSearch}};
 use trie::distance::{IncrementalDistance, DamerauLevenshteinDistance};
 use trie::dictionary::{Dictionary, DictionaryLine};
 
@@ -89,7 +89,7 @@ fn bench() {
 
 fn main() {
     if let Some(arg) = std::env::args().nth(1) {
-        let trie = MiniSearch::load("words_1000.bin").unwrap();
+        let trie = ArtSearch::load("art_1000.bin").unwrap();
 
         match &*arg {
             "graph" => trie.graph(),

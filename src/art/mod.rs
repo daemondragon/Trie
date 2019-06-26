@@ -3,9 +3,13 @@
 //! (https://db.in.tum.de/~leis/papers/ART.pdf)
 
 use crate::WordFrequency;
+use crate::memory::DiskMemory;
 
 pub mod compiler;
+pub mod searcher;
+
 pub use compiler::ArtCompiler;
+pub use searcher::ArtSearch;
 
 use core::num::NonZeroUsize;
 
@@ -122,6 +126,22 @@ struct Node256 {
     header: NodeHeader,
     /// An offset where the node's children are located
     pointers: [Option<NodeOffset>; 256]
+}
+
+unsafe fn get<T: Sized>(memory: &DiskMemory, offset: usize) -> Option<&T> {
+    if offset + core::mem::size_of::<T>() <= memory.len() {
+        Some(&*(memory.data().offset(offset as isize) as *const T))
+    } else {
+        None
+    }
+}
+
+unsafe fn get_mut<T: Sized>(memory: &mut DiskMemory, offset: usize) -> Option<&mut T> {
+    if offset + core::mem::size_of::<T>() <= memory.len() {
+        Some(&mut *(memory.data().offset(offset as isize) as *mut T))
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]

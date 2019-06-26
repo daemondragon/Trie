@@ -1,20 +1,21 @@
 use crate::{Compiler, WordFrequency};
 use crate::memory::{DiskMemory, MemoryAccess};
 
-use super::{NodeKind, NodeHeader, Node0, Node4, Node16, Node48, Node256};
+use super::{NodeKind, NodeHeader, NodeOffset, Node0, Node4, Node16, Node48, Node256};
 
 use core::mem::size_of;
 
 /// The compiler compile the ART structure into a stored
 /// equivalent that can be directly used.
-/// For simplicity, the compiler work in two phase:
+/// For simplicity, the compiler work in three phases:
 /// -   The first phase, where word are added, when a node need
 ///     to be added, the Node256 is used instead
 ///     (all other nodes are never used)
-/// -   The second phase is the compresion phase, when no more node
-///     will be added. At this moment, node are compressed using the correct
-///     equivalent and correctly rewritten so that the structure takes less
-///     memory space.
+/// -   The second phase, where path are compressed
+///     to reduce the number of nodes used
+/// -   The last phase is the node compression phase.
+///     Node are compressed using the correct equivalent and rewritten
+///     so that the structure takes less memory space.
 pub struct ArtCompiler {
     /// The disk memory that is been used to save all the nodes
     memory: DiskMemory,
@@ -24,7 +25,7 @@ pub struct ArtCompiler {
 }
 
 impl ArtCompiler {
-    fn new(filename: &str) -> Result<Self, String> {
+    pub fn new(filename: &str) -> Result<Self, String> {
         let mut compiler = ArtCompiler {
             memory: DiskMemory::new(filename, MemoryAccess::ReadWrite)?,
             nb_nodes: 0
@@ -68,40 +69,44 @@ impl ArtCompiler {
         Ok(index)
     }
 
-    fn get(&self, node_index: usize) -> &Node256 {
-        debug_assert!(node_index < self.nb_nodes);
+    fn get_256(&self, node_index: usize) -> &Node256 {
+        debug_assert!(node_index < self.nb_nodes * size_of::<Node256>());
 
         unsafe {
-            &*(self.memory.data() as *mut Node256).offset(node_index as isize)
+            &*(self.memory.data().offset(node_index as isize) as *const Node256)
         }
     }
 
-    fn get_mut(&self, node_index: usize) -> &mut Node256 {
-        debug_assert!(node_index < self.nb_nodes);
+    fn get_256_mut(&self, node_index: usize) -> &mut Node256 {
+        debug_assert!(node_index < self.nb_nodes * size_of::<Node256>());
 
         unsafe {
-            &mut *(self.memory.data() as *mut Node256).offset(node_index as isize)
+            &mut *(self.memory.data().offset(node_index as isize) as *mut Node256)
         }
     }
 
     fn add_rec(&mut self, word: &[u8], frequency: WordFrequency, node_index: usize) {
         if !word.is_empty() {
             // In the middle of the word.
-            /*
-            if self.nodes[node_index].children[word[0] as usize].is_none() {
+            if self.get_256(node_index).pointers[word[0] as usize].is_none() {
                 // Node absent, add it and treat it as added.
-                self.nodes.push(MiniNode {
-                    frequency: None,
-                    children: [None; 256]
+                let child_index = self.add_node(Node256 {
+                    header: NodeHeader {
+                        frequency: None,
+                        kind: NodeKind::Node256,
+                        nb_children: 0,
+                        path_length: 0,
+                        path: [0; 7]
+                    },
+                    pointers: [None; 256]
                 }).unwrap();
 
-                self.nodes[node_index].children[word[0] as usize] = NonZeroUsize::new(self.nodes.len() - 1);
+                self.get_256_mut(node_index).pointers[word[0] as usize] = NodeOffset::new(child_index);
             }
 
-            self.add_rec(self.nodes[node_index].children[word[0] as usize].unwrap().get(), &word[1..], frequency);
-            */
+            self.add_rec(&word[1..], frequency, self.get_256(node_index).pointers[word[0] as usize].unwrap().get());
         } else {
-            self.get_mut(node_index).header.frequency = Some(frequency);
+            self.get_256_mut(node_index).header.frequency = Some(frequency);
         }
     }
 }
@@ -113,6 +118,7 @@ impl Compiler for ArtCompiler {
     }
 
     fn build(self) {
+        // TODO: compact path
         // TODO: compact the structure.
     }
 }
