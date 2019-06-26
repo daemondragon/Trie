@@ -2,7 +2,7 @@ use crate::{Compiler, WordFrequency};
 use crate::memory::{DiskMemory, MemoryAccess};
 use crate::flags::Flags;
 
-use super::{NodeKind, NodeHeader, NodeOffset, Node0, Node4, Node16, Node48, Node256};
+use super::{NodeKind, NodeHeader, NodeOffset, Node0, Node4, Node16, Node48, Node256, get, get_mut};
 
 use core::mem::size_of;
 
@@ -169,8 +169,113 @@ impl ArtCompiler {
 
         for child_index in 0..self.get_256(index).pointers.len() {
             if let Some(child_index) = self.get_256(index).pointers[child_index].clone() {
-                self.path_compaction(child_index.get(), deleted_nodes);
+                self.path_compression(child_index.get(), deleted_nodes);
             }
+        }
+    }
+
+    // Compact all nodes so that they can use the more efficient
+    // memory layout adapted to their children count.
+    // Note that aftee this operation, there is empty space between
+    // nodes if they use smaller node version, they are not compacted together.
+    //
+    // Compacting all nodes allows for after to compact the file
+    // so that more nodes can be placed in the same memory space,
+    // allowing for another speed boost.
+    fn node_compression(&mut self, index: usize, deleted_nodes: &Flags) {
+        // The current node doesn't have been deleted
+        debug_assert!(false == deleted_nodes.get(index / size_of::<Node256>()));
+
+        // Perform the change for the children before as after the memory layout
+        // will be changed. Doing this allows to not have one loop per node kind.
+        for child_index in 0..self.get_256(index).pointers.len() {
+            if let Some(child_index) = self.get_256(index).pointers[child_index].clone() {
+                self.node_compression(child_index.get(), deleted_nodes);
+            }
+        }
+
+        match self.get_256(index).header.nb_children {
+            0 => {
+                let mut node = self.get_256_mut(index);
+                node.header.kind = NodeKind::Node0;
+            },
+            1...4 => {
+                let mut node = self.get_256_mut(index);
+                node.header.kind = NodeKind::Node4;
+
+                // Change the layout
+                let mut keys: [u8; 4] = [0; 4];
+                let mut ptrs: [Option<NodeOffset>; 4] = [None; 4];
+                let mut insert_index = 0;
+
+                for (value, pointer) in node.pointers
+                                            .iter()
+                                            .enumerate()
+                                            .filter(|(_, ptr)| ptr.is_some()) {
+
+                    debug_assert!(insert_index < 4);
+
+                    keys[insert_index] = value as u8;
+                    ptrs[insert_index] = *pointer;
+                    insert_index += 1;
+                }
+
+                let mut node = unsafe { get_mut::<Node4>(&mut self.memory, index) }.unwrap();
+                node.keys = keys;
+                node.pointers = ptrs;
+            },
+            5...16 => {
+                let mut node = self.get_256_mut(index);
+                node.header.kind = NodeKind::Node16;
+
+
+                // Change the layout
+                let mut keys: [u8; 16] = [0; 16];
+                let mut ptrs: [Option<NodeOffset>; 16] = [None; 16];
+                let mut insert_index = 0;
+
+                for (value, pointer) in node.pointers
+                                            .iter()
+                                            .enumerate()
+                                            .filter(|(_, ptr)| ptr.is_some()) {
+
+                    debug_assert!(insert_index < 16);
+
+                    keys[insert_index] = value as u8;
+                    ptrs[insert_index] = *pointer;
+                    insert_index += 1;
+                }
+
+                let mut node = unsafe { get_mut::<Node16>(&mut self.memory, index) }.unwrap();
+                node.keys = keys;
+                node.pointers = ptrs;
+            },
+            17...48 => {
+                let mut node = self.get_256_mut(index);
+                node.header.kind = NodeKind::Node48;
+
+                                // Change the layout
+                let mut keys: [u8; 256] = [core::u8::MAX; 256];
+                let mut ptrs: [Option<NodeOffset>; 48] = [None; 48];
+                let mut insert_index = 0;
+
+                for (value, pointer) in node.pointers
+                                            .iter()
+                                            .enumerate()
+                                            .filter(|(_, ptr)| ptr.is_some()) {
+
+                    debug_assert!(insert_index < 48);
+
+                    keys[value] = insert_index as u8;
+                    ptrs[insert_index] = *pointer;
+                    insert_index += 1;
+                }
+
+                let mut node = unsafe { get_mut::<Node48>(&mut self.memory, index) }.unwrap();
+                node.keys = keys;
+                node.pointers = ptrs;
+            },
+            _ => { /* Nothing to do, as it's the big version that need to be used */ }
         }
     }
 }
@@ -185,7 +290,7 @@ impl Compiler for ArtCompiler {
         let mut deleted_nodes = Flags::new(self.memory.len() / size_of::<Node256>());
 
         self.path_compression(0, &mut deleted_nodes);
-        // TODO: compact the structure.
+        self.node_compression(0, &deleted_nodes);
         // TODO: compact the file.
     }
 }

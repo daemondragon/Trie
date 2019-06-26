@@ -290,7 +290,7 @@ impl ArtSearch {
                 let node = unsafe { get::<Node4>(&self.memory, index) }.unwrap();
 
                 for (value, child_index) in (0..node.header.nb_children)
-                                                .map(|index| (index as u8 as char, node.pointers[index as usize].unwrap())) {
+                                                .map(|index| (node.keys[index as usize] as char, node.pointers[index as usize].unwrap())) {
 
                     self.graph_rec_display_link(index, child_index.get(), value);
                     self.graph_rec(child_index.get());
@@ -300,20 +300,20 @@ impl ArtSearch {
                 let node = unsafe { get::<Node16>(&self.memory, index) }.unwrap();
 
                 for (value, child_index) in (0..node.header.nb_children)
-                                                .map(|index| (index as u8 as char, node.pointers[index as usize].unwrap())) {
+                                                .map(|index| (node.keys[index as usize] as char, node.pointers[index as usize].unwrap())) {
 
                     self.graph_rec_display_link(index, child_index.get(), value);
                     self.graph_rec(child_index.get());
                 }
-
             },
             NodeKind::Node48 => {
                 let node = unsafe { get::<Node48>(&self.memory, index) }.unwrap();
 
                 for (value, child_index) in node.keys
                                                 .iter()
-                                                .filter(|index| **index != core::u8::MAX)
-                                                .map(|index| (*index as char, node.pointers[*index as usize].unwrap())) {
+                                                .enumerate()
+                                                .filter(|(_, ptr_index)| **ptr_index != core::u8::MAX)
+                                                .map(|(index, ptr)| (index as u8 as char, node.pointers[*ptr as usize].unwrap())) {
 
                     self.graph_rec_display_link(index, child_index.get(), value);
                     self.graph_rec(child_index.get());
