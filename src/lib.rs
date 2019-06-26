@@ -5,6 +5,7 @@ pub mod trie;
 pub mod art;
 
 mod memory;
+mod flags;
 
 use core::num::NonZeroU32;
 use core::cmp::Ordering;

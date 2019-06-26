@@ -325,7 +325,7 @@ impl ArtSearch {
                 for (value, child_index) in node.pointers
                                        .iter()
                                        .enumerate()
-                                       .filter(|(value, index)| index.is_some())
+                                       .filter(|(_, index)| index.is_some())
                                        .map(|(value, index)| (value as u8 as char, index.unwrap())) {
 
                     self.graph_rec_display_link(index, child_index.get(), value);
