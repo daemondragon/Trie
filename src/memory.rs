@@ -71,6 +71,10 @@ impl DiskMemory {
         self.length
     }
 
+    pub fn file(&self) -> &File {
+        &self.file
+    }
+
     pub fn data(&self) -> *const u8 {
         self.data
     }

@@ -5,6 +5,11 @@ use crate::flags::Flags;
 use super::{NodeKind, NodeHeader, NodeOffset, Node0, Node4, Node16, Node48, Node256, get, get_mut};
 
 use core::mem::size_of;
+use std::os::unix::io::AsRawFd;
+
+extern {
+    fn ftruncate(fd: i32, length: isize) -> i32;
+}
 
 /// The compiler compile the ART structure into a stored
 /// equivalent that can be directly used.
@@ -121,7 +126,11 @@ impl ArtCompiler {
             self.get_256_mut(node_index).header.frequency = Some(frequency);
         }
     }
+}
 
+/// All further optimisation that can be made on the ART
+/// to increase it's speed.
+impl ArtCompiler {
     // Compact all path that can be compressed (single children nodes)
     // so that there is less node to iterate over when searching for words.
     //
@@ -278,6 +287,139 @@ impl ArtCompiler {
             _ => { /* Nothing to do, as it's the big version that need to be used */ }
         }
     }
+
+    fn memory_compression_mapping(&self, deleted_nodes: &Flags) -> Vec<(usize, usize)> {
+        let mut mapping: Vec<(usize, usize)> = (0..self.nb_nodes)
+            .filter(|index| !deleted_nodes.get(*index))
+            .map(|index| index * size_of::<Node256>())
+            .map(|index| (index, index))
+            .collect();
+
+        assert!(mapping.len() > 0);
+        assert_eq!(0, mapping[0].0);
+        assert_eq!(0, mapping[0].1);
+
+        let mut next_position = 0;
+        mapping
+            .iter_mut()
+            .for_each(|it| {
+                debug_assert!(next_position <= it.0);
+
+                it.1 = next_position;
+                let header = unsafe { get::<NodeHeader>(&self.memory, it.0) }.unwrap();
+
+                next_position += match header.kind {
+                    NodeKind::Node0 => size_of::<Node0>(),
+                    NodeKind::Node4 => size_of::<Node4>(),
+                    NodeKind::Node16 => size_of::<Node16>(),
+                    NodeKind::Node48 => size_of::<Node48>(),
+                    NodeKind::Node256 => size_of::<Node256>()
+                };
+            });
+
+        return mapping;
+    }
+
+    fn rewritte_nodes(&mut self, mapping: &Vec<(usize, usize)>) {
+        for index in mapping.iter().map(|(_, new)| new) {
+
+            match (unsafe { get::<NodeHeader>(&self.memory, *index) }).unwrap().kind {
+                NodeKind::Node0 => { /* No more thing to do */ },
+                NodeKind::Node4 => {
+                    let mut node = unsafe { get_mut::<Node4>(&mut self.memory, *index) }.unwrap();
+
+                    for ptr_index in 0..node.header.nb_children {
+                        node.pointers[ptr_index as usize] = mapping
+                            .iter()
+                            .find(|(old, new)| *old == node.pointers[ptr_index as usize].unwrap().get())
+                            .map(|(old, new)| NodeOffset::new(*new).unwrap());
+                    }
+                },
+                NodeKind::Node16 => {
+                    let mut node = unsafe { get_mut::<Node16>(&mut self.memory, *index) }.unwrap();
+
+                    for ptr_index in 0..node.header.nb_children {
+                        node.pointers[ptr_index as usize] = mapping
+                            .iter()
+                            .find(|(old, new)| *old == node.pointers[ptr_index as usize].unwrap().get())
+                            .map(|(old, new)| NodeOffset::new(*new).unwrap());
+                    }
+                },
+                NodeKind::Node48 => {
+                    let mut node = unsafe { get_mut::<Node48>(&mut self.memory, *index) }.unwrap();
+
+                    for ptr_index in 0..node.header.nb_children {
+                        node.pointers[ptr_index as usize] = mapping
+                            .iter()
+                            .find(|(old, new)| *old == node.pointers[ptr_index as usize].unwrap().get())
+                            .map(|(old, new)| NodeOffset::new(*new).unwrap());
+                    }
+
+                },
+                NodeKind::Node256 => {
+                    let mut node = unsafe { get_mut::<Node256>(&mut self.memory, *index) }.unwrap();
+
+                    for ptr_index in 0..256 {
+                        if node.pointers[ptr_index as usize].is_none() {
+                            continue;
+                        }
+
+                        node.pointers[ptr_index as usize] = mapping
+                            .iter()
+                            .find(|(old, new)| *old == node.pointers[ptr_index as usize].unwrap().get())
+                            .map(|(old, new)| NodeOffset::new(*new).unwrap());
+                    }
+                }
+            }
+        }
+
+        // Truncate the file so that it is shorter
+        // to remove useless node at the end.
+        unsafe {
+            let last_index = mapping.last().unwrap().1;
+            let header = unsafe { get::<NodeHeader>(&self.memory, last_index) }.unwrap();
+
+            let end = last_index + match header.kind {
+                NodeKind::Node0 => size_of::<Node0>(),
+                NodeKind::Node4 => size_of::<Node4>(),
+                NodeKind::Node16 => size_of::<Node16>(),
+                NodeKind::Node48 => size_of::<Node48>(),
+                NodeKind::Node256 => size_of::<Node256>()
+            };
+
+            ftruncate(self.memory.file().as_raw_fd(), end as isize);
+        }
+    }
+
+    /// Compress the trie in memory so that less space need to be fetched
+    /// while searching for a word.
+    fn memory_compression(&mut self, deleted_nodes: &Flags) {
+        let mapping = self.memory_compression_mapping(deleted_nodes);
+
+        // Moving all nodes.
+        for (old_index, next_index) in mapping.iter() {
+            debug_assert!(next_index <= old_index);
+
+            unsafe {
+                let size = match get::<NodeHeader>(&self.memory, *old_index).unwrap().kind {
+                    NodeKind::Node0 => size_of::<Node0>(),
+                    NodeKind::Node4 => size_of::<Node4>(),
+                    NodeKind::Node16 => size_of::<Node16>(),
+                    NodeKind::Node48 => size_of::<Node48>(),
+                    NodeKind::Node256 => size_of::<Node256>()
+                };
+
+                std::ptr::copy(
+                    self.memory.data().offset(*old_index as isize) as *const u8,
+                    self.memory.data().offset(*next_index as isize) as *mut u8,
+                    size
+                );
+            }
+        }
+
+        // Rewritting nodes to match the new mapping
+        self.rewritte_nodes(&mapping);
+    }
 }
 
 impl Compiler for ArtCompiler {
@@ -291,6 +433,6 @@ impl Compiler for ArtCompiler {
 
         self.path_compression(0, &mut deleted_nodes);
         self.node_compression(0, &deleted_nodes);
-        // TODO: compact the file.
+        self.memory_compression(&deleted_nodes);
     }
 }
