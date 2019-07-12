@@ -3,7 +3,7 @@ extern crate trie;
 use std::io::{self, StdoutLock, BufRead, Write};
 use core::str::from_utf8_unchecked;
 
-use trie::{WordData, Search, trie::MiniSearch};
+use trie::{WordData, Search, art::ArtSearch};
 use trie::distance::{IncrementalDistance, DamerauLevenshteinDistance};
 use trie::limit::Limit;
 
@@ -18,7 +18,7 @@ fn main() {
     // Add a limit of memory to test in real condition.
     Limit::Memory(512 * 1024 * 1024/* 512 MB*/).apply();
 
-    let searcher = MiniSearch::load(
+    let searcher = ArtSearch::load(
         &std::env::args().nth(1).expect("Missing compiled file as argument")
     ).expect("Could not load the compiled structure");
 
@@ -48,6 +48,8 @@ fn main() {
             .expect("Expected the word to search as last argument");
 
         leveinshtein.reset(word.as_bytes());
+        line.clear();// To prevent reading the same line again and again
+
         let mut results = searcher.search(&mut leveinshtein, max_distance);
 
         write!(stdout, "[").unwrap();

@@ -40,14 +40,14 @@ fn basic_test() {
 
 fn bench() {
     for amount in [1_000, 10_000, 100_000].iter() {
-        let trie_filename = format!("art_{}.bin", amount);
+        let trie_filename = format!("compiled/art_{}.bin", amount);
         println!("Testing trie \"{}\"", trie_filename);
         let trie = ArtSearch::load(&trie_filename).unwrap();
 
         // Starting by the good query first as they are more representative
         // of the real performance of the algorithm.
         for good_query_ratio in [75, 50, 25].iter() {
-            let query_filename = format!("../split/query_{}_{}_{}.txt", amount, good_query_ratio, 100 - good_query_ratio);
+            let query_filename = format!("./split/query_{}_{}_{}.txt", amount, good_query_ratio, 100 - good_query_ratio);
             println!("Testing query file \"{}\"", query_filename);
 
             // Loading all the query once to prevent loading this impacting the result.
@@ -93,7 +93,7 @@ fn bench() {
 
 fn main() {
     if let Some(arg) = std::env::args().nth(1) {
-        let trie = ArtSearch::load("art_1000.bin").unwrap();
+        let trie = ArtSearch::load("compiled/art_1000.bin").unwrap();
 
         match &*arg {
             "graph" => trie.graph(),

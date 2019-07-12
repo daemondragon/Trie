@@ -9,7 +9,7 @@ use std::cmp::min;
 ///
 /// In this trait, words can be seen as a stack of character that can freely
 /// be added and removed.
-pub trait IncrementalDistance {
+pub trait IncrementalDistance: core::fmt::Debug {
     /// Get the word that is being matched against all the other one.
     fn word(&self) -> &[u8];
 
@@ -152,7 +152,17 @@ impl IncrementalDistance for DamerauLevenshteinDistance {
 
     /// Get the current distance with the given word.
     fn distance(&self) -> usize {
-        *self.distances.last().unwrap()
+        self.distances[self.current.len().saturating_add(1) * self.word.len().saturating_add(1) - 1]
+    }
+
+    fn can_continue(&self, max_distance: usize) -> bool {
+        let offset = self.current.len();
+        let width = self.word.len().saturating_add(1);
+
+        // Suppression, Insertion and Removal
+        self.distances[offset.saturating_add(1) * width - 1] <= max_distance ||
+        // Replacement
+        self.distances[offset* width - 1] <= max_distance
     }
 }
 

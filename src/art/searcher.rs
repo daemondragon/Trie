@@ -67,7 +67,7 @@ impl ArtSearch {
                 let node = unsafe { get::<Node4>(&self.memory, index) }.unwrap();
 
                 for i in 0..(node.header.nb_children as usize) {
-                    if node.keys[i] == word[0] {
+                    if node.keys[i] == word[node.header.path_length as usize] {
                         return self.exact_search(
                             node.pointers[i].unwrap().get(),
                             &word[(node.header.path_length as usize + 1)..],
@@ -82,7 +82,7 @@ impl ArtSearch {
                 let node = unsafe { get::<Node16>(&self.memory, index) }.unwrap();
 
                 for i in 0..(node.header.nb_children as usize) {
-                    if node.keys[i] == word[0] {
+                    if node.keys[i] == word[node.header.path_length as usize] {
                         return self.exact_search(
                             node.pointers[i].unwrap().get(),
                             &word[(node.header.path_length as usize + 1)..],
@@ -96,7 +96,7 @@ impl ArtSearch {
             NodeKind::Node48 => {
                 let node = unsafe { get::<Node48>(&self.memory, index) }.unwrap();
 
-                let new_index = node.keys[word[0] as usize];
+                let new_index = node.keys[word[node.header.path_length as usize] as usize];
                 if new_index != core::u8::MAX {
                     // Can go futher
                     self.exact_search(
@@ -111,7 +111,7 @@ impl ArtSearch {
             NodeKind::Node256 => {
                 let node = unsafe { get::<Node256>(&self.memory, index) }.unwrap();
 
-                if let Some(index) = node.pointers[word[0] as usize] {
+                if let Some(index) = node.pointers[word[node.header.path_length as usize] as usize] {
                     self.exact_search(
                         index.get(),
                         &word[(node.header.path_length as usize + 1)..],
@@ -130,32 +130,32 @@ impl ArtSearch {
         let header = unsafe { get::<NodeHeader>(&self.memory, index) }.unwrap();
 
         // Compressed path adding
-
-        let mut previous_distance = distance.distance();
         for i in 0..(header.path_length as usize) {
-            let new_distance = distance.push(header.path[i]);
-
-            if previous_distance < new_distance && new_distance > max_distance {
-                for _ in 0..=i {
-                    // Correctly pop to prevent mistakes.
-                    distance.pop();
-                }
-                return;// Excedeed max distance
-            }
-
-            previous_distance = new_distance;
+            distance.push(header.path[i]);
         }
 
+        let new_distance = distance.distance();
+
         // Check that the node contains a data
-        if previous_distance <= max_distance {
+        if new_distance <= max_distance {
             if let Some(frequency) = header.frequency {
                 result.push(WordData {
                     word: distance.current().into(),
                     frequency: frequency,
-                    distance: previous_distance
+                    distance: new_distance
                 });
             }
         }
+
+        if distance.word().len() < distance.word().len() && new_distance > max_distance + 1 {
+            for _ in 0..header.path_length {
+                // Correctly pop to prevent mistakes.
+                distance.pop();
+            }
+            return;
+        }
+
+        let distance_continue = distance.word().len() >= distance.current().len() + 1;
 
         // Going further
         match header.kind {
@@ -165,7 +165,7 @@ impl ArtSearch {
 
                 for i in 0..(node.header.nb_children as usize) {
                     let new_distance = distance.push(node.keys[i]);
-                    if new_distance <= max_distance || previous_distance >= new_distance {
+                    if new_distance <= max_distance + 1 || distance_continue {
                         self.distance_search(
                             node.pointers[i].unwrap().get(),
                             distance,
@@ -181,7 +181,7 @@ impl ArtSearch {
 
                 for i in 0..(node.header.nb_children as usize) {
                     let new_distance = distance.push(node.keys[i]);
-                    if new_distance <= max_distance || previous_distance >= new_distance {
+                    if new_distance <= max_distance + 1 || distance_continue {
                         self.distance_search(
                             node.pointers[i].unwrap().get(),
                             distance,
@@ -195,13 +195,13 @@ impl ArtSearch {
             NodeKind::Node48 => {
                 let node = unsafe { get::<Node48>(&self.memory, index) }.unwrap();
 
-                for i in 0..node.pointers.len() {
+                for i in 0..node.keys.len() {
                     let new_index = node.keys[i];
                     if new_index == core::u8::MAX {
                         continue;// Not a pointer
                     }
                     let new_distance = distance.push(i as u8);
-                    if new_distance <= max_distance || previous_distance >= new_distance {
+                    if new_distance <= max_distance + 1 || distance_continue {
                         self.distance_search(
                             node.pointers[new_index as usize].unwrap().get(),
                             distance,
@@ -215,11 +215,10 @@ impl ArtSearch {
             NodeKind::Node256 => {
                 let node = unsafe { get::<Node256>(&self.memory, index) }.unwrap();
 
-
                 for i in 0..node.pointers.len() {
                     if let Some(index) = node.pointers[i] {
                         let new_distance = distance.push(i as u8);
-                        if new_distance <= max_distance || previous_distance >= new_distance {
+                        if new_distance <= max_distance + 1 || distance_continue {
                             self.distance_search(
                                 index.get(),
                                 distance,
