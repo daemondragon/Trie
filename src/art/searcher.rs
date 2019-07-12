@@ -1,8 +1,8 @@
-use crate::{Search, Information, WordFrequency, WordData};
+use crate::{Search, Information, WordData};
 use crate::memory::{DiskMemory, MemoryAccess};
 use crate::distance::IncrementalDistance;
 
-use super::{NodeKind, NodeHeader, NodeOffset, Node0, Node4, Node16, Node48, Node256, get, get_mut};
+use super::{NodeKind, NodeHeader, Node0, Node4, Node16, Node48, Node256, get};
 
 pub struct ArtSearch {
     /// The disk memory that is been used to save all the nodes
@@ -19,7 +19,224 @@ impl ArtSearch {
 
 impl Search for ArtSearch {
     fn search(&self, distance: &mut IncrementalDistance, max_distance: usize) -> Box<dyn Iterator<Item=WordData>> {
-        Box::new(std::iter::empty())
+        if max_distance == 0 {
+            Box::new(self.exact_search(0, distance.word(), distance.word()).into_iter())
+        } else {
+            let mut result = Vec::new();
+
+            self.distance_search(0, distance, max_distance, &mut result);
+
+            result.sort();
+            Box::new(result.into_iter())
+        }
+    }
+}
+
+impl ArtSearch {
+    fn exact_search(&self, index: usize, word: &[u8], full_word: &[u8]) -> Option<WordData> {
+        let header = unsafe { get::<NodeHeader>(&self.memory, index) }.unwrap();
+
+        if word.len() < header.path_length as usize {
+            return None;// Current node is after the searched word
+        }
+
+        for i in 0..(header.path_length as usize) {
+            if header.path[i] != word[i] {
+                return None;// Different word
+            }
+        }
+
+        if word.len() == header.path_length as usize {
+            // Check that the node contains a data
+            if let Some(frequency) = header.frequency {
+                // Word found, returning it
+                return Some(WordData {
+                    word: full_word.into(),
+                    frequency: frequency,
+                    distance: 0
+                });
+            } else {
+                return None;// Don't contains data in it
+            }
+        }
+
+        // Need to go further
+        match header.kind {
+            NodeKind::Node0 => { None /* Can't go further */},
+            NodeKind::Node4 => {
+                let node = unsafe { get::<Node4>(&self.memory, index) }.unwrap();
+
+                for i in 0..(node.header.nb_children as usize) {
+                    if node.keys[i] == word[0] {
+                        return self.exact_search(
+                            node.pointers[i].unwrap().get(),
+                            &word[(node.header.path_length as usize + 1)..],
+                            full_word
+                        );
+                    }
+                }
+
+                None
+            },
+            NodeKind::Node16 => {
+                let node = unsafe { get::<Node16>(&self.memory, index) }.unwrap();
+
+                for i in 0..(node.header.nb_children as usize) {
+                    if node.keys[i] == word[0] {
+                        return self.exact_search(
+                            node.pointers[i].unwrap().get(),
+                            &word[(node.header.path_length as usize + 1)..],
+                            full_word
+                        );
+                    }
+                }
+
+                None
+            },
+            NodeKind::Node48 => {
+                let node = unsafe { get::<Node48>(&self.memory, index) }.unwrap();
+
+                let new_index = node.keys[word[0] as usize];
+                if new_index != core::u8::MAX {
+                    // Can go futher
+                    self.exact_search(
+                        node.pointers[new_index as usize].unwrap().get(),
+                        &word[(node.header.path_length as usize + 1)..],
+                        full_word
+                    )
+                } else {
+                    None
+                }
+            },
+            NodeKind::Node256 => {
+                let node = unsafe { get::<Node256>(&self.memory, index) }.unwrap();
+
+                if let Some(index) = node.pointers[word[0] as usize] {
+                    self.exact_search(
+                        index.get(),
+                        &word[(node.header.path_length as usize + 1)..],
+                        full_word
+                    )
+                } else {
+                    None
+                }
+            }
+        }
+    }
+
+    fn distance_search(&self, index: usize, distance: &mut IncrementalDistance,
+                       max_distance: usize, result: &mut Vec<WordData>) {
+
+        let header = unsafe { get::<NodeHeader>(&self.memory, index) }.unwrap();
+
+        // Compressed path adding
+
+        let mut previous_distance = distance.distance();
+        for i in 0..(header.path_length as usize) {
+            let new_distance = distance.push(header.path[i]);
+
+            if previous_distance < new_distance && new_distance > max_distance {
+                for _ in 0..=i {
+                    // Correctly pop to prevent mistakes.
+                    distance.pop();
+                }
+                return;// Excedeed max distance
+            }
+
+            previous_distance = new_distance;
+        }
+
+        // Check that the node contains a data
+        if previous_distance <= max_distance {
+            if let Some(frequency) = header.frequency {
+                result.push(WordData {
+                    word: distance.current().into(),
+                    frequency: frequency,
+                    distance: previous_distance
+                });
+            }
+        }
+
+        // Going further
+        match header.kind {
+            NodeKind::Node0 => { /* Can't go further */},
+            NodeKind::Node4 => {
+                let node = unsafe { get::<Node4>(&self.memory, index) }.unwrap();
+
+                for i in 0..(node.header.nb_children as usize) {
+                    let new_distance = distance.push(node.keys[i]);
+                    if new_distance <= max_distance || previous_distance >= new_distance {
+                        self.distance_search(
+                            node.pointers[i].unwrap().get(),
+                            distance,
+                            max_distance,
+                            result
+                        );
+                    }
+                    distance.pop();
+                }
+            },
+            NodeKind::Node16 => {
+                let node = unsafe { get::<Node16>(&self.memory, index) }.unwrap();
+
+                for i in 0..(node.header.nb_children as usize) {
+                    let new_distance = distance.push(node.keys[i]);
+                    if new_distance <= max_distance || previous_distance >= new_distance {
+                        self.distance_search(
+                            node.pointers[i].unwrap().get(),
+                            distance,
+                            max_distance,
+                            result
+                        );
+                    }
+                    distance.pop();
+                }
+            },
+            NodeKind::Node48 => {
+                let node = unsafe { get::<Node48>(&self.memory, index) }.unwrap();
+
+                for i in 0..node.pointers.len() {
+                    let new_index = node.keys[i];
+                    if new_index == core::u8::MAX {
+                        continue;// Not a pointer
+                    }
+                    let new_distance = distance.push(i as u8);
+                    if new_distance <= max_distance || previous_distance >= new_distance {
+                        self.distance_search(
+                            node.pointers[new_index as usize].unwrap().get(),
+                            distance,
+                            max_distance,
+                            result
+                        );
+                    }
+                    distance.pop();
+                }
+            },
+            NodeKind::Node256 => {
+                let node = unsafe { get::<Node256>(&self.memory, index) }.unwrap();
+
+
+                for i in 0..node.pointers.len() {
+                    if let Some(index) = node.pointers[i] {
+                        let new_distance = distance.push(i as u8);
+                        if new_distance <= max_distance || previous_distance >= new_distance {
+                            self.distance_search(
+                                index.get(),
+                                distance,
+                                max_distance,
+                                result
+                            );
+                        }
+                        distance.pop();
+                    }
+                }
+            }
+        }
+
+        for _ in 0..header.path_length {
+            // Correctly pop to prevent mistakes.
+            distance.pop();
+        }
     }
 }
 
@@ -55,7 +272,7 @@ impl ArtSearch {
             NodeKind::Node0 => {
                 let node = unsafe { get::<Node0>(&self.memory, index) }.unwrap();
 
-                if unsafe { &node.header.frequency }.is_some() { 1 } else { 0 }
+                if node.header.frequency.is_some() { 1 } else { 0 }
             },
             NodeKind::Node4 => {
                 let node = unsafe { get::<Node4>(&self.memory, index) }.unwrap();
@@ -70,7 +287,7 @@ impl ArtSearch {
             NodeKind::Node16 => {
                 let node = unsafe { get::<Node16>(&self.memory, index) }.unwrap();
 
-                let count: usize = if unsafe { &node.header.frequency }.is_some() { 1 } else { 0 };
+                let count: usize = if node.header.frequency.is_some() { 1 } else { 0 };
                 let children_count: usize = (0..node.header.nb_children)
                         .map(|index| self.words_rec(node.pointers[index as usize].unwrap().get()))
                         .sum();
@@ -80,7 +297,7 @@ impl ArtSearch {
             NodeKind::Node48 => {
                 let node = unsafe { get::<Node48>(&self.memory, index) }.unwrap();
 
-                let count: usize = if unsafe { &node.header.frequency }.is_some() { 1 } else { 0 };
+                let count: usize = if node.header.frequency.is_some() { 1 } else { 0 };
                 let children_count: usize = node.keys
                         .iter()
                         .filter(|index| **index != core::u8::MAX)
@@ -92,7 +309,7 @@ impl ArtSearch {
             NodeKind::Node256 => {
                 let node = unsafe { get::<Node256>(&self.memory, index) }.unwrap();
 
-                let count: usize = if unsafe { &node.header.frequency }.is_some() { 1 } else { 0 };
+                let count: usize = if node.header.frequency.is_some() { 1 } else { 0 };
                 let children_count: usize = node.pointers
                         .iter()
                         .filter(|index| index.is_some())

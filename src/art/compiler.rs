@@ -331,8 +331,8 @@ impl ArtCompiler {
                     for ptr_index in 0..node.header.nb_children {
                         node.pointers[ptr_index as usize] = mapping
                             .iter()
-                            .find(|(old, new)| *old == node.pointers[ptr_index as usize].unwrap().get())
-                            .map(|(old, new)| NodeOffset::new(*new).unwrap());
+                            .find(|(old, _)| *old == node.pointers[ptr_index as usize].unwrap().get())
+                            .map(|(_, new)| NodeOffset::new(*new).unwrap());
                     }
                 },
                 NodeKind::Node16 => {
@@ -341,8 +341,8 @@ impl ArtCompiler {
                     for ptr_index in 0..node.header.nb_children {
                         node.pointers[ptr_index as usize] = mapping
                             .iter()
-                            .find(|(old, new)| *old == node.pointers[ptr_index as usize].unwrap().get())
-                            .map(|(old, new)| NodeOffset::new(*new).unwrap());
+                            .find(|(old, _)| *old == node.pointers[ptr_index as usize].unwrap().get())
+                            .map(|(_, new)| NodeOffset::new(*new).unwrap());
                     }
                 },
                 NodeKind::Node48 => {
@@ -351,8 +351,8 @@ impl ArtCompiler {
                     for ptr_index in 0..node.header.nb_children {
                         node.pointers[ptr_index as usize] = mapping
                             .iter()
-                            .find(|(old, new)| *old == node.pointers[ptr_index as usize].unwrap().get())
-                            .map(|(old, new)| NodeOffset::new(*new).unwrap());
+                            .find(|(old, _)| *old == node.pointers[ptr_index as usize].unwrap().get())
+                            .map(|(_, new)| NodeOffset::new(*new).unwrap());
                     }
 
                 },
@@ -366,8 +366,8 @@ impl ArtCompiler {
 
                         node.pointers[ptr_index as usize] = mapping
                             .iter()
-                            .find(|(old, new)| *old == node.pointers[ptr_index as usize].unwrap().get())
-                            .map(|(old, new)| NodeOffset::new(*new).unwrap());
+                            .find(|(old, _)| *old == node.pointers[ptr_index as usize].unwrap().get())
+                            .map(|(_, new)| NodeOffset::new(*new).unwrap());
                     }
                 }
             }
@@ -377,7 +377,7 @@ impl ArtCompiler {
         // to remove useless node at the end.
         unsafe {
             let last_index = mapping.last().unwrap().1;
-            let header = unsafe { get::<NodeHeader>(&self.memory, last_index) }.unwrap();
+            let header = get::<NodeHeader>(&self.memory, last_index).unwrap();
 
             let end = last_index + match header.kind {
                 NodeKind::Node0 => size_of::<Node0>(),

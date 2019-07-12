@@ -112,6 +112,7 @@ impl DiskMemory {
             .read(true)
             .write(*access != MemoryAccess::ReadOnly)
             .create(allow_create)
+            .truncate(allow_create)
             .open(filename)
             .map_err(|error| format!("Can't create new memory for \"{}\" ({})", filename, error))
     }

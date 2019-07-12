@@ -29,6 +29,9 @@ pub trait IncrementalDistance {
     /// with the given word. This is used to allows reusing the buffer
     /// for multiple iterations.
     fn reset(&mut self, word: &[u8]);
+
+    /// Get the current distance with the given word.
+    fn distance(&self) -> usize;
 }
 
 /// Calculate the distance between a word and all words present in a trie.
@@ -146,6 +149,11 @@ impl IncrementalDistance for DamerauLevenshteinDistance {
         // Set the new wanted word
         self.word.extend_from_slice(word);
     }
+
+    /// Get the current distance with the given word.
+    fn distance(&self) -> usize {
+        *self.distances.last().unwrap()
+    }
 }
 
 #[cfg(test)]
@@ -195,6 +203,13 @@ mod tests {
                 "Distance between {} and {} is wrong. Got {}, expected {} ({:?})",
                 word_1, word_2,
                 calculated_distance, distance,
+                distance_calculator
+            );
+
+            assert_eq!(*distance, distance_calculator.distance(),
+                "Distance between {} and {} is wrong. Got {}, expected {} ({:?})",
+                word_1, word_2,
+                distance_calculator.distance(), distance,
                 distance_calculator
             );
         }
