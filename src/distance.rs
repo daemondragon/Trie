@@ -104,29 +104,32 @@ impl IncrementalDistance for DamerauLevenshteinDistance {
             self.distances.resize_with(offset + matrix_width, Default::default);
         }
 
-        self.distances[offset] = self.current.len();
-        for index in 1..matrix_width {
-            let cost = (self.word[index - 1] != value) as usize;
+        unsafe
+        {
+            *self.distances.get_unchecked_mut(offset) = self.current.len();
+            for index in 1..matrix_width {
+                let cost = (*self.word.get_unchecked(index - 1) != value) as usize;
 
-            let deletion = self.distances[offset + index - 1] + 1;
-            let insertion = self.distances[previous_offset + index] + 1;
-            let substitution = self.distances[previous_offset + index - 1] + cost;
-            let transposition = if index >= 2 && self.current.len() >= 2 &&
-                self.word[index - 2] == value && self.word[index - 1] == self.current[self.current.len() - 2] {
+                let deletion = self.distances.get_unchecked(offset + index - 1) + 1;
+                let insertion = self.distances.get_unchecked(previous_offset + index) + 1;
+                let substitution = self.distances.get_unchecked(previous_offset + index - 1) + cost;
+                let transposition = if index >= 2 && self.current.len() >= 2 &&
+                    *self.word.get_unchecked(index - 2) == value && self.word.get_unchecked(index - 1) == self.current.get_unchecked(self.current.len() - 2) {
 
-                self.distances[previous_previous_offset + index - 2] + cost
-            } else {
-                // Create a big enought value so that only 3 min are needed
-                // instead of 4. Reduce computation needed.
-                self.distances.len()
-            };
+                    self.distances.get_unchecked(previous_previous_offset + index - 2) + cost
+                } else {
+                    // Create a big enought value so that only 3 min are needed
+                    // instead of 4. Reduce computation needed.
+                    self.distances.len()
+                };
 
-            // Compute the new distance in the matrix.
-            self.distances[offset + index] = min(min(deletion, insertion), min(substitution, transposition));
+                // Compute the new distance in the matrix.
+                *self.distances.get_unchecked_mut(offset + index) = min(min(deletion, insertion), min(substitution, transposition));
+            }
+
+            // Get the calculated distances of the new words.
+            *self.distances.get_unchecked(offset + matrix_width - 1)
         }
-
-        // Get the calculated distances of the new words.
-        self.distances[offset + matrix_width - 1]
     }
 
     fn pop(&mut self) -> bool {
@@ -153,16 +156,6 @@ impl IncrementalDistance for DamerauLevenshteinDistance {
     /// Get the current distance with the given word.
     fn distance(&self) -> usize {
         self.distances[self.current.len().saturating_add(1) * self.word.len().saturating_add(1) - 1]
-    }
-
-    fn can_continue(&self, max_distance: usize) -> bool {
-        let offset = self.current.len();
-        let width = self.word.len().saturating_add(1);
-
-        // Suppression, Insertion and Removal
-        self.distances[offset.saturating_add(1) * width - 1] <= max_distance ||
-        // Replacement
-        self.distances[offset* width - 1] <= max_distance
     }
 }
 
