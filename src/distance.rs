@@ -10,9 +10,6 @@ use std::cmp::min;
 /// In this trait, words can be seen as a stack of character that can freely
 /// be added and removed.
 pub trait IncrementalDistance: core::fmt::Debug {
-    /// Get the word that is being matched against all the other one.
-    fn word(&self) -> &[u8];
-
     /// Add a new character to the previous word
     /// and return the computed distance.
     fn push(&mut self, value: u8) -> usize;
@@ -22,16 +19,23 @@ pub trait IncrementalDistance: core::fmt::Debug {
     /// or false if there no more character to pop.
     fn pop(&mut self) -> bool;
 
-    /// Get the current word that is being matched against the word.
-    fn current(&self) -> &[u8];
-
     /// Reset the distance to a clean state to calculate the distance
     /// with the given word. This is used to allows reusing the buffer
     /// for multiple iterations.
     fn reset(&mut self, word: &[u8]);
 
+    /// Get the word that is being matched against all the other one.
+    fn word(&self) -> &[u8];
+
+    /// Get the current word that is being matched against the word.
+    fn current(&self) -> &[u8];
+
     /// Get the current distance with the given word.
     fn distance(&self) -> usize;
+
+    /// Does calling push more times will keep the distance
+    /// under the given threshold
+    fn can_continue(&self, max_distance: usize) -> bool;
 }
 
 /// Calculate the distance between a word and all words present in a trie.
@@ -55,7 +59,10 @@ pub struct DamerauLevenshteinDistance {
     /// It can be greater as the Vec is not resized down when a pop have been done
     /// as it allows to reuse the part when multiple push have been done
     /// without having to resize again the Vec.
-    distances: Vec<usize>
+    distances: Vec<usize>,
+    /// For each lines, was it the minimum in it ?
+    /// Used for early stopping to prevent going to far.
+    min_distances: Vec<usize>
 }
 
 impl DamerauLevenshteinDistance {
@@ -75,19 +82,19 @@ impl DamerauLevenshteinDistance {
         (0..=word.len())
             .for_each(|value| matrix.push(value));
 
+        let mut min_distances = Vec::with_capacity(max_words_len + 1);
+        min_distances.push(0);//The minimum distances in the first line is 0.
+
         DamerauLevenshteinDistance {
             word: word.into(),
             current: Vec::with_capacity(max_words_len),
-            distances: matrix
+            distances: matrix,
+            min_distances: min_distances
         }
     }
 }
 
 impl IncrementalDistance for DamerauLevenshteinDistance {
-
-    fn word(&self) -> &[u8] {
-        &self.word
-    }
 
     fn push(&mut self, value: u8) -> usize {
         // Calculating all matrix offset at once.
@@ -102,11 +109,16 @@ impl IncrementalDistance for DamerauLevenshteinDistance {
             // Resizing the distances matrix if needed so that the new element
             // can be correctly inserted without any problem.
             self.distances.resize_with(offset + matrix_width, Default::default);
+
+            // min_distance grows at the same times as the distance matrix
+            self.min_distances.resize_with(self.current.len() + 1, Default::default);
         }
 
         unsafe
         {
-            *self.distances.get_unchecked_mut(offset) = self.current.len();
+            let mut min_distance = self.current.len();
+            *self.distances.get_unchecked_mut(offset) = min_distance;
+
             for index in 1..matrix_width {
                 let cost = (*self.word.get_unchecked(index - 1) != value) as usize;
 
@@ -124,8 +136,14 @@ impl IncrementalDistance for DamerauLevenshteinDistance {
                 };
 
                 // Compute the new distance in the matrix.
-                *self.distances.get_unchecked_mut(offset + index) = min(min(deletion, insertion), min(substitution, transposition));
+                let new_distance = min(min(deletion, insertion), min(substitution, transposition));
+                *self.distances.get_unchecked_mut(offset + index) = new_distance;
+                // Keep track of the minimum distance to add it later
+                min_distance = min(min_distance, new_distance);
             }
+
+            // Set the minimun distance of the line.
+            *self.min_distances.get_unchecked_mut(self.current.len() + 1) = min_distance;
 
             // Get the calculated distances of the new words.
             *self.distances.get_unchecked(offset + matrix_width - 1)
@@ -136,26 +154,42 @@ impl IncrementalDistance for DamerauLevenshteinDistance {
         self.current.pop().is_some()
     }
 
-    fn current(&self) -> &[u8] {
-        self.current.as_slice()
-    }
-
     fn reset(&mut self, word: &[u8]) {
         // Clear all buffer
         self.distances.clear();
+        self.min_distances.clear();
         self.current.clear();
         self.word.clear();
 
         // Reset the distance matrix
         (0..=word.len()).for_each(|value| self.distances.push(value));
+        // Reset the min_distance matrix
+        self.min_distances.push(0);
 
         // Set the new wanted word
         self.word.extend_from_slice(word);
     }
 
-    /// Get the current distance with the given word.
+    fn word(&self) -> &[u8] {
+        &self.word
+    }
+
+    fn current(&self) -> &[u8] {
+        self.current.as_slice()
+    }
+
     fn distance(&self) -> usize {
         self.distances[self.current.len().saturating_add(1) * self.word.len().saturating_add(1) - 1]
+    }
+
+    fn can_continue(&self, max_distance: usize) -> bool {
+        let width = self.word.len().saturating_add(1);
+        let distance_offset = self.current.len().saturating_add(1) * width - 1;
+
+        *unsafe { self.min_distances.get_unchecked(self.current.len()) } <= max_distance ||
+            (self.current.len() >= 2 &&
+                self.word.len() >= 2 &&
+                self.distances[distance_offset - 2 * width - 2] < max_distance)
     }
 }
 
@@ -193,7 +227,9 @@ mod tests {
             ("Saturday", "Sunday", 3),
             ("gifts", "profit", 5),
             ("Something", "Smoething", 1),
-            ("Pomatomus", "Pomatomus", 0)
+            ("Pomatomus", "Pomatomus", 0),
+            ("kynar", "kaynar", 1),
+            ("kynar", "kayna", 2),
         ].iter() {
             let mut distance_calculator = DamerauLevenshteinDistance::new_with_words_len(word_1.as_bytes(), word_2.len());
             let calculated_distance = word_2
