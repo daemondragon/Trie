@@ -128,20 +128,16 @@ struct Node256 {
     pointers: [Option<NodeOffset>; 256]
 }
 
-unsafe fn get<T: Sized>(memory: &DiskMemory, offset: usize) -> Option<&T> {
-    if offset + core::mem::size_of::<T>() <= memory.len() {
-        Some(&*(memory.data().offset(offset as isize) as *const T))
-    } else {
-        None
-    }
+unsafe fn get<T: Sized>(memory: &DiskMemory, offset: usize) -> &T {
+    debug_assert!(offset + core::mem::size_of::<T>() <= memory.len());
+
+    &*(memory.data().offset(offset as isize) as *const T)
 }
 
-unsafe fn get_mut<T: Sized>(memory: &mut DiskMemory, offset: usize) -> Option<&mut T> {
-    if offset + core::mem::size_of::<T>() <= memory.len() {
-        Some(&mut *(memory.data().offset(offset as isize) as *mut T))
-    } else {
-        None
-    }
+unsafe fn get_mut<T: Sized>(memory: &mut DiskMemory, offset: usize) -> &mut T {
+    debug_assert!(offset + core::mem::size_of::<T>() <= memory.len());
+
+    &mut *(memory.data().offset(offset as isize) as *mut T)
 }
 
 #[cfg(test)]

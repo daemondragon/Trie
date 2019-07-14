@@ -229,7 +229,7 @@ impl ArtCompiler {
                     insert_index += 1;
                 }
 
-                let mut node = unsafe { get_mut::<Node4>(&mut self.memory, index) }.unwrap();
+                let mut node = unsafe { get_mut::<Node4>(&mut self.memory, index) };
                 node.keys = keys;
                 node.pointers = ptrs;
             },
@@ -255,7 +255,7 @@ impl ArtCompiler {
                     insert_index += 1;
                 }
 
-                let mut node = unsafe { get_mut::<Node16>(&mut self.memory, index) }.unwrap();
+                let mut node = unsafe { get_mut::<Node16>(&mut self.memory, index) };
                 node.keys = keys;
                 node.pointers = ptrs;
             },
@@ -280,7 +280,7 @@ impl ArtCompiler {
                     insert_index += 1;
                 }
 
-                let mut node = unsafe { get_mut::<Node48>(&mut self.memory, index) }.unwrap();
+                let mut node = unsafe { get_mut::<Node48>(&mut self.memory, index) };
                 node.keys = keys;
                 node.pointers = ptrs;
             },
@@ -306,7 +306,7 @@ impl ArtCompiler {
                 debug_assert!(next_position <= it.0);
 
                 it.1 = next_position;
-                let header = unsafe { get::<NodeHeader>(&self.memory, it.0) }.unwrap();
+                let header = unsafe { get::<NodeHeader>(&self.memory, it.0) };
 
                 next_position += match header.kind {
                     NodeKind::Node0 => size_of::<Node0>(),
@@ -323,10 +323,10 @@ impl ArtCompiler {
     fn rewritte_nodes(&mut self, mapping: &Vec<(usize, usize)>) {
         for index in mapping.iter().map(|(_, new)| new) {
 
-            match (unsafe { get::<NodeHeader>(&self.memory, *index) }).unwrap().kind {
+            match (unsafe { get::<NodeHeader>(&self.memory, *index) }).kind {
                 NodeKind::Node0 => { /* No more thing to do */ },
                 NodeKind::Node4 => {
-                    let mut node = unsafe { get_mut::<Node4>(&mut self.memory, *index) }.unwrap();
+                    let mut node = unsafe { get_mut::<Node4>(&mut self.memory, *index) };
 
                     for ptr_index in 0..node.header.nb_children {
                         node.pointers[ptr_index as usize] = mapping
@@ -336,7 +336,7 @@ impl ArtCompiler {
                     }
                 },
                 NodeKind::Node16 => {
-                    let mut node = unsafe { get_mut::<Node16>(&mut self.memory, *index) }.unwrap();
+                    let mut node = unsafe { get_mut::<Node16>(&mut self.memory, *index) };
 
                     for ptr_index in 0..node.header.nb_children {
                         node.pointers[ptr_index as usize] = mapping
@@ -346,7 +346,7 @@ impl ArtCompiler {
                     }
                 },
                 NodeKind::Node48 => {
-                    let mut node = unsafe { get_mut::<Node48>(&mut self.memory, *index) }.unwrap();
+                    let mut node = unsafe { get_mut::<Node48>(&mut self.memory, *index) };
 
                     for ptr_index in 0..node.header.nb_children {
                         node.pointers[ptr_index as usize] = mapping
@@ -357,7 +357,7 @@ impl ArtCompiler {
 
                 },
                 NodeKind::Node256 => {
-                    let mut node = unsafe { get_mut::<Node256>(&mut self.memory, *index) }.unwrap();
+                    let mut node = unsafe { get_mut::<Node256>(&mut self.memory, *index) };
 
                     for ptr_index in 0..256 {
                         if node.pointers[ptr_index as usize].is_none() {
@@ -377,7 +377,7 @@ impl ArtCompiler {
         // to remove useless node at the end.
         unsafe {
             let last_index = mapping.last().unwrap().1;
-            let header = get::<NodeHeader>(&self.memory, last_index).unwrap();
+            let header = get::<NodeHeader>(&self.memory, last_index);
 
             let end = last_index + match header.kind {
                 NodeKind::Node0 => size_of::<Node0>(),
@@ -401,7 +401,7 @@ impl ArtCompiler {
             debug_assert!(next_index <= old_index);
 
             unsafe {
-                let size = match get::<NodeHeader>(&self.memory, *old_index).unwrap().kind {
+                let size = match get::<NodeHeader>(&self.memory, *old_index).kind {
                     NodeKind::Node0 => size_of::<Node0>(),
                     NodeKind::Node4 => size_of::<Node4>(),
                     NodeKind::Node16 => size_of::<Node16>(),

@@ -34,7 +34,7 @@ impl Search for ArtSearch {
 
 impl ArtSearch {
     fn exact_search(&self, index: usize, word: &[u8], full_word: &[u8]) -> Option<WordData> {
-        let header = unsafe { get::<NodeHeader>(&self.memory, index) }.unwrap();
+        let header = unsafe { get::<NodeHeader>(&self.memory, index) };
 
         if word.len() < header.path_length as usize {
             return None;// Current node is after the searched word
@@ -64,7 +64,7 @@ impl ArtSearch {
         match header.kind {
             NodeKind::Node0 => { None /* Can't go further */},
             NodeKind::Node4 => {
-                let node = unsafe { get::<Node4>(&self.memory, index) }.unwrap();
+                let node = unsafe { get::<Node4>(&self.memory, index) };
 
                 for i in 0..(node.header.nb_children as usize) {
                     if node.keys[i] == word[node.header.path_length as usize] {
@@ -79,7 +79,7 @@ impl ArtSearch {
                 None
             },
             NodeKind::Node16 => {
-                let node = unsafe { get::<Node16>(&self.memory, index) }.unwrap();
+                let node = unsafe { get::<Node16>(&self.memory, index) };
 
                 for i in 0..(node.header.nb_children as usize) {
                     if node.keys[i] == word[node.header.path_length as usize] {
@@ -94,7 +94,7 @@ impl ArtSearch {
                 None
             },
             NodeKind::Node48 => {
-                let node = unsafe { get::<Node48>(&self.memory, index) }.unwrap();
+                let node = unsafe { get::<Node48>(&self.memory, index) };
 
                 let new_index = node.keys[word[node.header.path_length as usize] as usize];
                 if new_index != core::u8::MAX {
@@ -109,7 +109,7 @@ impl ArtSearch {
                 }
             },
             NodeKind::Node256 => {
-                let node = unsafe { get::<Node256>(&self.memory, index) }.unwrap();
+                let node = unsafe { get::<Node256>(&self.memory, index) };
 
                 if let Some(index) = node.pointers[word[node.header.path_length as usize] as usize] {
                     self.exact_search(
@@ -127,7 +127,7 @@ impl ArtSearch {
     fn distance_search(&self, index: usize, distance: &mut IncrementalDistance,
                        max_distance: usize, result: &mut Vec<WordData>) {
 
-        let header = unsafe { get::<NodeHeader>(&self.memory, index) }.unwrap();
+        let header = unsafe { get::<NodeHeader>(&self.memory, index) };
 
         // Compressed path adding
         for i in 0..(header.path_length as usize) {
@@ -159,7 +159,7 @@ impl ArtSearch {
         match header.kind {
             NodeKind::Node0 => { /* Can't go further */},
             NodeKind::Node4 => {
-                let node = unsafe { get::<Node4>(&self.memory, index) }.unwrap();
+                let node = unsafe { get::<Node4>(&self.memory, index) };
 
                 for i in 0..(node.header.nb_children as usize) {
                     distance.push(node.keys[i]);
@@ -175,7 +175,7 @@ impl ArtSearch {
                 }
             },
             NodeKind::Node16 => {
-                let node = unsafe { get::<Node16>(&self.memory, index) }.unwrap();
+                let node = unsafe { get::<Node16>(&self.memory, index) };
 
                 for i in 0..(node.header.nb_children as usize) {
                     distance.push(node.keys[i]);
@@ -191,7 +191,7 @@ impl ArtSearch {
                 }
             },
             NodeKind::Node48 => {
-                let node = unsafe { get::<Node48>(&self.memory, index) }.unwrap();
+                let node = unsafe { get::<Node48>(&self.memory, index) };
 
                 for i in 0..node.keys.len() {
                     let new_index = node.keys[i];
@@ -211,7 +211,7 @@ impl ArtSearch {
                 }
             },
             NodeKind::Node256 => {
-                let node = unsafe { get::<Node256>(&self.memory, index) }.unwrap();
+                let node = unsafe { get::<Node256>(&self.memory, index) };
 
                 for i in 0..node.pointers.len() {
                     if let Some(index) = node.pointers[i] {
@@ -265,14 +265,14 @@ impl Information for ArtSearch {
 
 impl ArtSearch {
     fn words_rec(&self, index: usize) -> usize {
-        match (unsafe { get::<NodeHeader>(&self.memory, index) }).unwrap().kind {
+        match (unsafe { get::<NodeHeader>(&self.memory, index) }).kind {
             NodeKind::Node0 => {
-                let node = unsafe { get::<Node0>(&self.memory, index) }.unwrap();
+                let node = unsafe { get::<Node0>(&self.memory, index) };
 
                 if node.header.frequency.is_some() { 1 } else { 0 }
             },
             NodeKind::Node4 => {
-                let node = unsafe { get::<Node4>(&self.memory, index) }.unwrap();
+                let node = unsafe { get::<Node4>(&self.memory, index) };
 
                 let count: usize = if unsafe { &node.header.frequency }.is_some() { 1 } else { 0 };
                 let children_count: usize = (0..node.header.nb_children)
@@ -282,7 +282,7 @@ impl ArtSearch {
                 count + children_count
             },
             NodeKind::Node16 => {
-                let node = unsafe { get::<Node16>(&self.memory, index) }.unwrap();
+                let node = unsafe { get::<Node16>(&self.memory, index) };
 
                 let count: usize = if node.header.frequency.is_some() { 1 } else { 0 };
                 let children_count: usize = (0..node.header.nb_children)
@@ -292,7 +292,7 @@ impl ArtSearch {
                 count + children_count
             },
             NodeKind::Node48 => {
-                let node = unsafe { get::<Node48>(&self.memory, index) }.unwrap();
+                let node = unsafe { get::<Node48>(&self.memory, index) };
 
                 let count: usize = if node.header.frequency.is_some() { 1 } else { 0 };
                 let children_count: usize = node.keys
@@ -304,7 +304,7 @@ impl ArtSearch {
                 count + children_count
             },
             NodeKind::Node256 => {
-                let node = unsafe { get::<Node256>(&self.memory, index) }.unwrap();
+                let node = unsafe { get::<Node256>(&self.memory, index) };
 
                 let count: usize = if node.header.frequency.is_some() { 1 } else { 0 };
                 let children_count: usize = node.pointers
@@ -319,10 +319,10 @@ impl ArtSearch {
     }
 
     fn nodes_rec(&self, index: usize) -> usize {
-        match (unsafe { get::<NodeHeader>(&self.memory, index) }).unwrap().kind {
+        match (unsafe { get::<NodeHeader>(&self.memory, index) }).kind {
             NodeKind::Node0 => { 1 },
             NodeKind::Node4 => {
-                let node = unsafe { get::<Node4>(&self.memory, index) }.unwrap();
+                let node = unsafe { get::<Node4>(&self.memory, index) };
 
                 let children_count: usize = (0..node.header.nb_children)
                         .map(|index| self.nodes_rec(node.pointers[index as usize].unwrap().get()))
@@ -331,7 +331,7 @@ impl ArtSearch {
                 1 + children_count
             },
             NodeKind::Node16 => {
-                let node = unsafe { get::<Node16>(&self.memory, index) }.unwrap();
+                let node = unsafe { get::<Node16>(&self.memory, index) };
 
                 let children_count: usize = (0..node.header.nb_children)
                         .map(|index| self.nodes_rec(node.pointers[index as usize].unwrap().get()))
@@ -340,7 +340,7 @@ impl ArtSearch {
                 1 + children_count
             },
             NodeKind::Node48 => {
-                let node = unsafe { get::<Node48>(&self.memory, index) }.unwrap();
+                let node = unsafe { get::<Node48>(&self.memory, index) };
 
                 let children_count: usize = node.keys
                         .iter()
@@ -351,7 +351,7 @@ impl ArtSearch {
                 1 + children_count
             },
             NodeKind::Node256 => {
-                let node = unsafe { get::<Node256>(&self.memory, index) }.unwrap();
+                let node = unsafe { get::<Node256>(&self.memory, index) };
 
                 let children_count: usize = node.pointers
                         .iter()
@@ -365,10 +365,10 @@ impl ArtSearch {
     }
 
     fn height_rec(&self, index: usize) -> usize {
-        match (unsafe { get::<NodeHeader>(&self.memory, index) }).unwrap().kind {
+        match (unsafe { get::<NodeHeader>(&self.memory, index) }).kind {
             NodeKind::Node0 => { 0 },
             NodeKind::Node4 => {
-                let node = unsafe { get::<Node4>(&self.memory, index) }.unwrap();
+                let node = unsafe { get::<Node4>(&self.memory, index) };
 
                 let children_count: usize = (0..node.header.nb_children)
                         .map(|index| self.height_rec(node.pointers[index as usize].unwrap().get()))
@@ -378,7 +378,7 @@ impl ArtSearch {
                 1 + children_count
             },
             NodeKind::Node16 => {
-                let node = unsafe { get::<Node16>(&self.memory, index) }.unwrap();
+                let node = unsafe { get::<Node16>(&self.memory, index) };
 
                 let children_count: usize = (0..node.header.nb_children)
                         .map(|index| self.height_rec(node.pointers[index as usize].unwrap().get()))
@@ -388,7 +388,7 @@ impl ArtSearch {
                 1 + children_count
             },
             NodeKind::Node48 => {
-                let node = unsafe { get::<Node48>(&self.memory, index) }.unwrap();
+                let node = unsafe { get::<Node48>(&self.memory, index) };
 
                 let children_count: usize = node.keys
                         .iter()
@@ -400,7 +400,7 @@ impl ArtSearch {
                 1 + children_count
             },
             NodeKind::Node256 => {
-                let node = unsafe { get::<Node256>(&self.memory, index) }.unwrap();
+                let node = unsafe { get::<Node256>(&self.memory, index) };
 
                 let children_count: usize = node.pointers
                         .iter()
@@ -415,14 +415,14 @@ impl ArtSearch {
     }
 
     fn max_lenght_rec(&self, index: usize) -> usize {
-        match (unsafe { get::<NodeHeader>(&self.memory, index) }).unwrap().kind {
+        match (unsafe { get::<NodeHeader>(&self.memory, index) }).kind {
             NodeKind::Node0 => {
-                let node = unsafe { get::<Node0>(&self.memory, index) }.unwrap();
+                let node = unsafe { get::<Node0>(&self.memory, index) };
 
                 1 + node.header.path_length as usize
             },
             NodeKind::Node4 => {
-                let node = unsafe { get::<Node4>(&self.memory, index) }.unwrap();
+                let node = unsafe { get::<Node4>(&self.memory, index) };
 
                 let children_count: usize = (0..node.header.nb_children)
                         .map(|index| self.max_lenght_rec(node.pointers[index as usize].unwrap().get()))
@@ -432,7 +432,7 @@ impl ArtSearch {
                 1 + node.header.path_length as usize + children_count
             },
             NodeKind::Node16 => {
-                let node = unsafe { get::<Node16>(&self.memory, index) }.unwrap();
+                let node = unsafe { get::<Node16>(&self.memory, index) };
 
                 let children_count: usize = (0..node.header.nb_children)
                         .map(|index| self.max_lenght_rec(node.pointers[index as usize].unwrap().get()))
@@ -442,7 +442,7 @@ impl ArtSearch {
                 1 + node.header.path_length as usize + children_count
             },
             NodeKind::Node48 => {
-                let node = unsafe { get::<Node48>(&self.memory, index) }.unwrap();
+                let node = unsafe { get::<Node48>(&self.memory, index) };
 
                 let children_count: usize = node.keys
                         .iter()
@@ -454,7 +454,7 @@ impl ArtSearch {
                 1 + node.header.path_length as usize + children_count
             },
             NodeKind::Node256 => {
-                let node = unsafe { get::<Node256>(&self.memory, index) }.unwrap();
+                let node = unsafe { get::<Node256>(&self.memory, index) };
 
                 let children_count: usize = node.pointers
                         .iter()
@@ -469,7 +469,7 @@ impl ArtSearch {
     }
 
     fn graph_rec_display_link(&self, index: usize, child_index: usize, value: char) {
-        let child_header = unsafe { get::<NodeHeader>(&self.memory, child_index) }.unwrap();
+        let child_header = unsafe { get::<NodeHeader>(&self.memory, child_index) };
 
         println!("{} -> {} [label=\"{}{}\"];",
             index, child_index, value,
@@ -478,7 +478,7 @@ impl ArtSearch {
     }
 
     fn graph_rec(&self, index: usize) {
-        let header = unsafe { get::<NodeHeader>(&self.memory, index) }.unwrap();
+        let header = unsafe { get::<NodeHeader>(&self.memory, index) };
 
         print!("{} [", index);
 
@@ -498,10 +498,10 @@ impl ArtSearch {
 
         println!("];");
 
-        match (unsafe { get::<NodeHeader>(&self.memory, index) }).unwrap().kind {
+        match header.kind {
             NodeKind::Node0 => { /* No more thing to do */ },
             NodeKind::Node4 => {
-                let node = unsafe { get::<Node4>(&self.memory, index) }.unwrap();
+                let node = unsafe { get::<Node4>(&self.memory, index) };
 
                 for (value, child_index) in (0..node.header.nb_children)
                                                 .map(|index| (node.keys[index as usize] as char, node.pointers[index as usize].unwrap())) {
@@ -511,7 +511,7 @@ impl ArtSearch {
                 }
             },
             NodeKind::Node16 => {
-                let node = unsafe { get::<Node16>(&self.memory, index) }.unwrap();
+                let node = unsafe { get::<Node16>(&self.memory, index) };
 
                 for (value, child_index) in (0..node.header.nb_children)
                                                 .map(|index| (node.keys[index as usize] as char, node.pointers[index as usize].unwrap())) {
@@ -521,7 +521,7 @@ impl ArtSearch {
                 }
             },
             NodeKind::Node48 => {
-                let node = unsafe { get::<Node48>(&self.memory, index) }.unwrap();
+                let node = unsafe { get::<Node48>(&self.memory, index) };
 
                 for (value, child_index) in node.keys
                                                 .iter()
@@ -534,7 +534,7 @@ impl ArtSearch {
                 }
             },
             NodeKind::Node256 => {
-                let node = unsafe { get::<Node256>(&self.memory, index) }.unwrap();
+                let node = unsafe { get::<Node256>(&self.memory, index) };
 
                 for (value, child_index) in node.pointers
                                        .iter()
