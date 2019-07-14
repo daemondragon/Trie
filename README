@@ -1,0 +1,85 @@
+# TextMining projet
+
+## Introduction
+
+This project have as goal a creation of a search structure that is first compiled
+to an efficient form, then various search are perfomed in it.
+
+Search must be efficient, as on a 3 million words structure, the search structure must support:
+ * At least 3000 queries per second / core with distance = 0
+ * At least 300 queries per second / core with distance = 1
+ * At least 30 queries per second / core with distance = 2
+
+Requirements are for a 2,7 GHz Intel Core i7 CPU.
+
+Furthermore, the program must not use most than 512M of RAM.
+This is why both wanted binary first limit the maximum RAM usage
+so that tests can be done in real condition
+
+## Compilation
+
+To compile this program, use `cargo build --release`
+This will create the two wanted file in `target/release`
+that will then need to be moved to the root of the project.
+
+## Questions
+
+### Décrivez les choix de design de votre programme
+### Listez l’ensemble des tests effectués sur votre programme (en plus des units tests)
+### Avez-vous détecté des cas où la correction par distance ne fonctionnait pas (même avec une distance élevée) ?
+### Quelle est la structure de données que vous avez implémentée dans votre projet, pourquoi ?
+### Proposez un réglage automatique de la distance pour un programme qui prend juste une chaîne de caractères en entrée, donner le processus d’évaluation ainsi que les résultats
+### Comment comptez vous améliorer les performances de votre programme
+### Que manque-t-il à votre correcteur orthographique pour qu’il soit à l’état de l’art ?
+
+## Performance
+
+This part regroup most of the benchmarks done for each major commit
+so that performance can be tracked and regression prevented.
+
+New commit are to be inserted at the top of this to prevent useless scrolling
+when creating new benchmark.
+
+Benchmark are done on a 2.2 GHz Intel Core™ i5-5200U CPU.
+
+### cad7c95
+
+Testing trie "compiled/art_1000.bin"
+Testing query file "./split/query_1000_75_25.txt"
+distance: 0, time: 0 ms (+- 0 ms) => 1000000 query/sec (+- 0 query)
+distance: 1, time: 91 ms (+- 2 ms) => 10989 query/sec (+- 241 query)
+distance: 2, time: 172 ms (+- 45 ms) => 5813 query/sec (+- 1520 query)
+Testing query file "./split/query_1000_50_50.txt"
+distance: 0, time: 0 ms (+- 0 ms) => 1000000 query/sec (+- 0 query)
+distance: 1, time: 111 ms (+- 15 ms) => 9009 query/sec (+- 1217 query)
+distance: 2, time: 174 ms (+- 3 ms) => 5747 query/sec (+- 99 query)
+Testing query file "./split/query_1000_25_75.txt"
+distance: 0, time: 0 ms (+- 0 ms) => 1000000 query/sec (+- 0 query)
+distance: 1, time: 93 ms (+- 3 ms) => 10752 query/sec (+- 346 query)
+distance: 2, time: 190 ms (+- 19 ms) => 5263 query/sec (+- 526 query)
+Testing trie "compiled/art_10000.bin"
+Testing query file "./split/query_10000_75_25.txt"
+distance: 0, time: 0 ms (+- 0 ms) => 3000000 query/sec (+- 0 query)
+distance: 1, time: 1432 ms (+- 125 ms) => 2094 query/sec (+- 182 query)
+distance: 2, time: 3388 ms (+- 72 ms) => 885 query/sec (+- 18 query)
+Testing query file "./split/query_10000_50_50.txt"
+distance: 0, time: 0 ms (+- 0 ms) => 3000000 query/sec (+- 0 query)
+distance: 1, time: 1333 ms (+- 20 ms) => 2250 query/sec (+- 33 query)
+distance: 2, time: 3493 ms (+- 22 ms) => 858 query/sec (+- 5 query)
+Testing query file "./split/query_10000_25_75.txt"
+distance: 0, time: 0 ms (+- 0 ms) => 3000000 query/sec (+- 0 query)
+distance: 1, time: 1352 ms (+- 105 ms) => 2218 query/sec (+- 172 query)
+distance: 2, time: 3365 ms (+- 272 ms) => 891 query/sec (+- 72 query)
+Testing trie "compiled/art_100000.bin"
+Testing query file "./split/query_100000_75_25.txt"
+distance: 0, time: 0 ms (+- 2 ms) => 3000000 query/sec (+- 6000000 query)
+distance: 1, time: 4613 ms (+- 280 ms) => 650 query/sec (+- 39 query)
+distance: 2, time: 20100 ms (+- 705 ms) => 149 query/sec (+- 5 query)
+Testing query file "./split/query_100000_50_50.txt"
+distance: 0, time: 0 ms (+- 0 ms) => 3000000 query/sec (+- 0 query)
+distance: 1, time: 4726 ms (+- 201 ms) => 634 query/sec (+- 26 query)
+distance: 2, time: 20363 ms (+- 1617 ms) => 147 query/sec (+- 11 query)
+Testing query file "./split/query_100000_25_75.txt"
+distance: 0, time: 0 ms (+- 0 ms) => 3000000 query/sec (+- 0 query)
+distance: 1, time: 4305 ms (+- 54 ms) => 696 query/sec (+- 8 query)
+distance: 2, time: 20657 ms (+- 1206 ms) => 145 query/sec (+- 8 query)
