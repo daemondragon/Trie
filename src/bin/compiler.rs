@@ -1,6 +1,6 @@
 extern crate trie;
 
-use trie::{Compiler, trie::MiniCompiler, art::ArtCompiler};
+use trie::{Compiler, art::ArtCompiler};
 use trie::dictionary::Dictionary;
 use trie::limit::Limit;
 

@@ -1,4 +1,5 @@
-use std::cmp::min;
+use core::cmp::min;
+use core::mem::size_of;
 
 /// Common interface for all distances that can be used on a Trie.
 /// The construction of a trie means that the distance can be calculated
@@ -60,7 +61,7 @@ pub struct DamerauLevenshteinDistance {
     /// as it allows to reuse the part when multiple push have been done
     /// without having to resize again the Vec.
     distances: Vec<usize>,
-    /// For each lines, was it the minimum in it ?
+    /// For each rows, was it the minimum in it ?
     /// Used for early stopping to prevent going to far.
     min_distances: Vec<usize>
 }
@@ -190,6 +191,67 @@ impl IncrementalDistance for DamerauLevenshteinDistance {
             (self.current.len() >= 2 &&
                 self.word.len() >= 2 &&
                 self.distances[distance_offset - 2 * width - 2] < max_distance)
+    }
+}
+
+/// Type use for the bit-vectors of the damerau levenshtein distance.
+/// Allows to easily change type for testing or performance purpose.
+type DamerauLevenshteinBitType = usize;
+/// How many bits vectors are stored in the damerau levenshtein distance per row.
+const NB_BIT_VECTORS: usize = 5;
+
+/// Calculate the distance between a word and all words present in a trie.
+/// The distance used is the Damerau-Levenshtein distance.
+/// This distance is exactly the same as the DamerauLevenshteinDistance one,
+/// but use bit-vector algorithm instead for faster computation.
+///
+/// Reference paper here:
+/// https://pdfs.semanticscholar.org/813e/26d8920d17c2afac6bf5a15c537b067a128a.pdf
+#[derive(Debug, Clone)]
+struct DamerauLevenshteinBitDistance {
+    /// The word that need to be matched against all the other one.
+    word: Vec<u8>,
+    /// All the characters that have been previously added and not popped.
+    /// They are needed for the transposition part of the algorithm.
+    current: Vec<u8>,
+    /// All bit-vectors that are needed for the computation to happend.
+    /// Bit-vectors are stored consecutively in this order:
+    /// D0: D0j[i] = 1 if D[i,j] = D[i-1,j-1]
+    /// HP: HPj[i] = 1 if D[i,j]-D[i,j-1] = 1
+    /// HN: HNj[i] = 1 if D[i,j]-D[i,j-1] = -1
+    /// VP: VPj[i] = 1 if D[i,j]-D[i-1,j] = 1
+    /// VN: VNj[i] = 1 if D[i,j]-D[i-1,j] = -1
+    /// Each bit-vectors take the same amount of space,
+    /// that is word.len() / size_of::<DamerauLevenshteinBitType>(), and are aligned
+    /// on the least significant bit.
+    bit_vector: Vec<DamerauLevenshteinBitType>,
+    /// For each rows, was it the minimum in it ?
+    /// Used for early stopping to prevent going to far.
+    min_distances: Vec<usize>,
+}
+
+impl DamerauLevenshteinBitDistance {
+    /// Create a new distance calculator for the given word.
+    pub fn new(word: &[u8]) -> Self {
+        DamerauLevenshteinBitDistance::new_with_words_len(word, word.len())
+    }
+
+    /// Create a new distance calculator for the given word.
+    /// The max_words_len parameter allows to specify the length
+    /// of the longest word that is expected to be used to calculate the
+    /// distance with the original word.
+    /// Doing so allows to pre-reserve the capacity of the distance matrix
+    /// so that no other resize is needed.
+    pub fn new_with_words_len(word: &[u8], max_words_len: usize) -> Self {
+        DamerauLevenshteinBitDistance {
+            word: word.into(),
+            current: Vec::with_capacity(max_words_len),
+            bit_vector: Vec::with_capacity(
+                (word.len().next_power_of_two() / size_of::<DamerauLevenshteinBitType>() * NB_BIT_VECTORS)
+                    * max_words_len
+            ),
+            min_distances: Vec::with_capacity(max_words_len)
+        }
     }
 }
 

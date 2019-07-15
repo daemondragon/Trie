@@ -4,7 +4,7 @@ use std::num::NonZeroU32;
 use std::time::Instant;
 use core::cmp::max;
 
-use trie::{Compiler, Search, Information, trie::{MiniCompiler, MiniSearch}, art::{ArtCompiler, ArtSearch}};
+use trie::{Compiler, Search, Information, art::{ArtCompiler, ArtSearch}};
 use trie::distance::{IncrementalDistance, DamerauLevenshteinDistance};
 use trie::dictionary::{Dictionary, DictionaryLine};
 
