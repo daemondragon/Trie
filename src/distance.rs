@@ -156,7 +156,7 @@ impl IncrementalDistance for DamerauLevenshteinDistance {
     }
 
     fn reset(&mut self, word: &[u8]) {
-        // Clear all buffer
+        // Clear all buffers
         self.distances.clear();
         self.min_distances.clear();
         self.current.clear();
@@ -198,17 +198,34 @@ impl IncrementalDistance for DamerauLevenshteinDistance {
 /// Allows to easily change type for testing or performance purpose.
 type DamerauLevenshteinBitType = usize;
 /// How many bits vectors are stored in the damerau levenshtein distance per row.
-const NB_BIT_VECTORS: usize = 5;
+const NB_BIT_VECTORS: usize = 6;
+
+#[derive(Debug, Clone, Default)]
+struct BitDistance {
+    /// The computed distance for the current row
+    distance: usize,
+    /// The minimun distance for the current row,
+    /// to knows if later call to push can makes the distance
+    /// goes under the threshold or not.
+    min_distance: usize,
+    /// Where the minimum distance is at as the next min_distance is generally
+    /// near this one. used to reduce search for it.
+    /// (the next index is the same one that can be increased if HPi != 1)
+    min_distance_index: usize
+}
 
 /// Calculate the distance between a word and all words present in a trie.
 /// The distance used is the Damerau-Levenshtein distance.
 /// This distance is exactly the same as the DamerauLevenshteinDistance one,
 /// but use bit-vector algorithm instead for faster computation.
 ///
+/// This version is intented to be used where it can be used easily, and use
+/// the previous as a fallback if this one does not have all its requirements.
+///
 /// Reference paper here:
 /// https://pdfs.semanticscholar.org/813e/26d8920d17c2afac6bf5a15c537b067a128a.pdf
 #[derive(Debug, Clone)]
-struct DamerauLevenshteinBitDistance {
+pub struct DamerauLevenshteinBitDistance {
     /// The word that need to be matched against all the other one.
     word: Vec<u8>,
     /// All the characters that have been previously added and not popped.
@@ -216,18 +233,18 @@ struct DamerauLevenshteinBitDistance {
     current: Vec<u8>,
     /// All bit-vectors that are needed for the computation to happend.
     /// Bit-vectors are stored consecutively in this order:
+    /// PM: PMc[i] = 1 if A[i] = c
     /// D0: D0j[i] = 1 if D[i,j] = D[i-1,j-1]
     /// HP: HPj[i] = 1 if D[i,j]-D[i,j-1] = 1
     /// HN: HNj[i] = 1 if D[i,j]-D[i,j-1] = -1
     /// VP: VPj[i] = 1 if D[i,j]-D[i-1,j] = 1
     /// VN: VNj[i] = 1 if D[i,j]-D[i-1,j] = -1
-    /// Each bit-vectors take the same amount of space,
-    /// that is word.len() / size_of::<DamerauLevenshteinBitType>(), and are aligned
-    /// on the least significant bit.
-    bit_vector: Vec<DamerauLevenshteinBitType>,
-    /// For each rows, was it the minimum in it ?
+    /// Each bit-vector takes only ONE DamerauLevenshteinBitType,
+    /// so it can't be used on too big distances or words.
+    bit_vectors: Vec<DamerauLevenshteinBitType>,
+    /// For each rows, the minimun and the current distance (in this order).
     /// Used for early stopping to prevent going to far.
-    min_distances: Vec<usize>,
+    distances: Vec<BitDistance>
 }
 
 impl DamerauLevenshteinBitDistance {
@@ -243,21 +260,156 @@ impl DamerauLevenshteinBitDistance {
     /// Doing so allows to pre-reserve the capacity of the distance matrix
     /// so that no other resize is needed.
     pub fn new_with_words_len(word: &[u8], max_words_len: usize) -> Self {
+
+        let mut bit_vectors = Vec::with_capacity(NB_BIT_VECTORS * (max_words_len + 1));
+        // Fill the first bit_vectors with zero for initialisation
+        bit_vectors.resize(NB_BIT_VECTORS, 0);
+
+        let mut distances = Vec::with_capacity(max_words_len + 1);
+        distances.push(BitDistance {
+            distance: word.len(),// current is empty, so distance is the number of character to add
+            min_distance: 0,
+            min_distance_index: 0// Min distance is found at index 0
+        });
+
         DamerauLevenshteinBitDistance {
             word: word.into(),
             current: Vec::with_capacity(max_words_len),
-            bit_vector: Vec::with_capacity(
-                (word.len().next_power_of_two() / size_of::<DamerauLevenshteinBitType>() * NB_BIT_VECTORS)
-                    * max_words_len
-            ),
-            min_distances: Vec::with_capacity(max_words_len)
+            bit_vectors: bit_vectors,
+            distances: distances
         }
+    }
+
+    pub fn allows(&self, word: &[u8], max_distance: usize) -> bool {
+        word.len() + max_distance
+                   + 1// To detect out of max distance word
+                   + 2// For transposition bound.
+            <= size_of::<DamerauLevenshteinBitType>() * 8
+    }
+}
+
+impl IncrementalDistance for DamerauLevenshteinBitDistance {
+
+    fn push(&mut self, value: u8) -> usize {
+        self.current.push(value);
+
+        debug_assert!(self.allows(self.current(), 0));
+
+        if self.distances.len() <= self.current.len() {
+            // min_distance grows at the same times as the bit_vectors matrix
+            self.distances.resize_with(self.current.len() + 1, Default::default);
+
+            // Resizing the bit_vectors matrix if needed so that the new element
+            // can be correctly inserted without any problem.
+            self.bit_vectors.resize(NB_BIT_VECTORS * (self.current.len() + 1), 0);
+        }
+
+        // PM: PMc[i] = 1 if A[i] = c
+        // D0: D0j[i] = 1 if D[i,j] = D[i-1,j-1]
+        // HP: HPj[i] = 1 if D[i,j]-D[i,j-1] = 1
+        // HN: HNj[i] = 1 if D[i,j]-D[i,j-1] = -1
+        // VP: VPj[i] = 1 if D[i,j]-D[i-1,j] = 1
+        // VN: VNj[i] = 1 if D[i,j]-D[i-1,j] = -1
+
+        let offset = self.current.len() * NB_BIT_VECTORS;
+
+        // compute PM
+        let mut pm = 0;
+        for index in 0..self.word.len() {
+            if value == self.word[index] {
+                pm |= 1 << index;
+            }
+        }
+        let pm = pm;
+
+        let pm_1 = self.bit_vectors[offset - NB_BIT_VECTORS];
+        let do_1 = self.bit_vectors[offset + 1 - NB_BIT_VECTORS];
+        let vp_1 = self.bit_vectors[offset + 4 - NB_BIT_VECTORS];
+        let vn_1 = self.bit_vectors[offset + 5 - NB_BIT_VECTORS];
+
+        let d0 = (((!do_1) & pm) << 1) & pm_1;
+        let d0 = d0 | (((pm & vp_1) + vp_1) ^ vp_1) | pm | vn_1;
+        let hp = vn_1 | !(d0 | vp_1);
+        let hn = d0 & vp_1;
+        let vp = (hn << 1) | !(d0 | (hp << 1) | 1);
+        let vn = d0 & ((hp << 1) | 1);
+
+        // Insert all values back into the iterator
+        self.bit_vectors[offset] = pm;
+        self.bit_vectors[offset + 1] = d0;
+        self.bit_vectors[offset + 2] = hp;
+        self.bit_vectors[offset + 3] = hn;
+        self.bit_vectors[offset + 4] = vp;
+        self.bit_vectors[offset + 5] = vn;
+
+        let previous_info = &self.distances[self.current.len() - 1];
+        let new_distance = previous_info.distance
+            + vp & (1 << self.word.len())
+            - vn & (1 << self.word.len());
+
+        let mut new_min_distance = previous_info.min_distance
+            + vp & (1 << previous_info.min_distance_index)
+            - vn & (1 << previous_info.min_distance_index);
+
+        let mut new_min_index = previous_info.min_distance_index;
+        while (hp & (1 << (new_min_index + 1))) == 0 {
+            new_min_index += 1;
+            new_min_distance -= hn & (1 << new_min_index);
+        }
+
+        self.distances[self.current.len()] = BitDistance {
+            distance: new_distance,
+            min_distance: new_min_distance,
+            min_distance_index: new_min_index
+        };
+
+        new_distance
+    }
+
+    fn pop(&mut self) -> bool {
+        self.current.pop().is_some()
+    }
+
+    fn reset(&mut self, word: &[u8]) {
+        // Fill first bit_vectors with 0 for initialisation
+        self.bit_vectors.resize(NB_BIT_VECTORS, 0);
+
+        // Clear all buffers
+        self.distances.resize_with(1, Default::default);// Keep the first distance already inserted.
+        self.current.clear();
+        self.word.clear();
+
+        // Set the new wanted word
+        self.word.extend_from_slice(word);
+    }
+
+    fn word(&self) -> &[u8] {
+        &self.word
+    }
+
+    fn current(&self) -> &[u8] {
+        self.current.as_slice()
+    }
+
+    fn distance(&self) -> usize {
+        self.distances[self.current.len()].distance
+    }
+
+    fn can_continue(&self, max_distance: usize) -> bool {
+        // There is still a possibility of inferior distance in the row
+        self.distances[self.current.len()].min_distance <= max_distance ||
+            (self.current.len() >= 2 &&
+             self.word.len() >= 2 && {
+                // Test for replacement distance < max_distance.
+
+                false
+             })
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{IncrementalDistance, DamerauLevenshteinDistance};
+    use super::{IncrementalDistance, DamerauLevenshteinDistance, DamerauLevenshteinBitDistance, NB_BIT_VECTORS};
 
     #[test]
     fn creation() {
@@ -344,5 +496,64 @@ mod tests {
 
         // The matching word have been changed meanwhile
         assert_ne!(0, calculated_distance);
+    }
+
+    //#[test]
+    fn bit_creation() {
+        {
+            let word = "test";
+            let distance = DamerauLevenshteinBitDistance::new(word.as_bytes());
+            // Compare with the correct word
+            assert_eq!(distance.word.len(), word.len());
+            assert_eq!(0, distance.current.len());
+            // The distance matrix have already done some reservation
+            assert!(distance.distances.capacity() != 0);
+        }
+
+        {
+            let word = "test";
+            let distance = DamerauLevenshteinBitDistance::new_with_words_len(word.as_bytes(), 16);
+            // Compare with the correct word
+            assert_eq!(word.len(), distance.word.len());
+            assert_eq!(0, distance.current.len());
+            // The bit_vectors have correctly reserved the capacity needed.
+            assert_eq!(NB_BIT_VECTORS * (16 + 1), distance.bit_vectors.capacity());
+            // The distance have also correctly reserved its space
+            assert_eq!(16 + 1, distance.distances.capacity());
+        }
+    }
+
+    //#[test]
+    fn bit_distance() {
+        for (word_1, word_2, distance) in [
+            ("kitten", "sitting", 3),
+            ("Saturday", "Sunday", 3),
+            ("gifts", "profit", 5),
+            ("Something", "Smoething", 1),
+            ("Pomatomus", "Pomatomus", 0),
+            ("kynar", "kaynar", 1),
+            ("kynar", "kayna", 2),
+        ].iter() {
+            let mut distance_calculator = DamerauLevenshteinBitDistance::new_with_words_len(word_1.as_bytes(), word_2.len());
+            let calculated_distance = word_2
+                .as_bytes()
+                .iter()
+                .map(|value| distance_calculator.push(*value))
+                .last().unwrap_or(word_1.len());// The distance with an empty string is the length of the other string.
+
+            assert_eq!(*distance, calculated_distance,
+                "Distance between {} and {} is wrong. Got {}, expected {} ({:?})",
+                word_1, word_2,
+                calculated_distance, distance,
+                distance_calculator
+            );
+
+            assert_eq!(*distance, distance_calculator.distance(),
+                "Distance between {} and {} is wrong. Got {}, expected {} ({:?})",
+                word_1, word_2,
+                distance_calculator.distance(), distance,
+                distance_calculator
+            );
+        }
     }
 }
