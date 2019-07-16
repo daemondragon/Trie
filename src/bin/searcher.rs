@@ -4,7 +4,7 @@ use std::io::{self, StdoutLock, BufRead, Write};
 use core::str::from_utf8_unchecked;
 
 use trie::{WordData, Search, art::ArtSearch};
-use trie::distance::{IncrementalDistance, DamerauLevenshteinDistance};
+use trie::distance::{IncrementalDistance, DamerauLevenshteinDistance, DamerauLevenshteinBitDistance};
 use trie::limit::Limit;
 
 fn write_word_data(stdout: &mut StdoutLock, data: &WordData)
@@ -30,6 +30,7 @@ fn main() {
 
     let mut line = String::new();
     let mut leveinshtein = DamerauLevenshteinDistance::new(&[]);
+    let mut leveinshtein_bit = DamerauLevenshteinBitDistance::new(&[]);
 
     while let Ok(nb_read) = stdin.read_line(&mut line) {
         if nb_read == 0 {
@@ -47,11 +48,18 @@ fn main() {
             .next()
             .expect("Expected the word to search as last argument");
 
-        leveinshtein.reset(word.as_bytes());
+        let word = word.as_bytes();
+
+        // Takes the optmized version of levenshtein if it can.
+        let mut results = if leveinshtein_bit.allows(word, max_distance) {
+            leveinshtein_bit.reset(word);
+            searcher.search(&mut leveinshtein_bit, max_distance)
+        } else {
+            leveinshtein.reset(word);
+            searcher.search(&mut leveinshtein, max_distance)
+        };
+
         line.clear();// To prevent reading the same line again and again
-
-        let mut results = searcher.search(&mut leveinshtein, max_distance);
-
         write!(stdout, "[").unwrap();
 
         results

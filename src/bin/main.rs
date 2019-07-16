@@ -5,7 +5,7 @@ use std::time::Instant;
 use core::cmp::max;
 
 use trie::{Compiler, Search, Information, art::{ArtCompiler, ArtSearch}};
-use trie::distance::{IncrementalDistance, DamerauLevenshteinDistance};
+use trie::distance::{IncrementalDistance, DamerauLevenshteinDistance, DamerauLevenshteinBitDistance};
 use trie::dictionary::{Dictionary, DictionaryLine};
 
 fn basic_test() {
@@ -53,14 +53,25 @@ fn bench() {
             // Loading all the query once to prevent loading this impacting the result.
             let lines: Vec<DictionaryLine> = Dictionary::new(&query_filename).unwrap().into_iter().collect();
             let mut levenshtein = DamerauLevenshteinDistance::new(&[]);
+            let mut levenshtein_bit = DamerauLevenshteinBitDistance::new(&[]);
 
             for distance in [0, 1, 2].iter() {
                 let mut times: Vec<u128> = (0..10).map(|_| {
                     let start = Instant::now();
 
                     for line in lines.iter() {
-                        levenshtein.reset(line.word.as_bytes());
-                        let count = trie.search(&mut levenshtein, *distance).count();
+
+                        let word = line.word.as_bytes();
+
+                        let results = if levenshtein_bit.allows(word, *distance) {
+                            levenshtein_bit.reset(word);
+                            trie.search(&mut levenshtein_bit, *distance)
+                        } else {
+                            levenshtein.reset(word);
+                            trie.search(&mut levenshtein, *distance)
+                        };
+
+                        let count = results.count();
 
                         assert!((*good_query_ratio != 100 || *distance != 0) || count == 1, "Expected to have found a word");
                     }

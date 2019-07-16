@@ -144,7 +144,7 @@ impl IncrementalDistance for DamerauLevenshteinDistance {
             }
 
             // Set the minimun distance of the line.
-            *self.min_distances.get_unchecked_mut(self.current.len() + 1) = min_distance;
+            *self.min_distances.get_unchecked_mut(self.current.len()) = min_distance;
 
             // Get the calculated distances of the new words.
             *self.distances.get_unchecked(offset + matrix_width - 1)
@@ -207,11 +207,7 @@ struct BitDistance {
     /// The minimun distance for the current row,
     /// to knows if later call to push can makes the distance
     /// goes under the threshold or not.
-    min_distance: usize,
-    /// Where the minimum distance is at as the next min_distance is generally
-    /// near this one. used to reduce search for it.
-    /// (the next index is the same one that can be increased if HPi != 1)
-    min_distance_index: usize
+    min_distance: usize
 }
 
 /// Calculate the distance between a word and all words present in a trie.
@@ -264,12 +260,12 @@ impl DamerauLevenshteinBitDistance {
         let mut bit_vectors = Vec::with_capacity(NB_BIT_VECTORS * (max_words_len + 1));
         // Fill the first bit_vectors with zero for initialisation
         bit_vectors.resize(NB_BIT_VECTORS, 0);
+        bit_vectors[4/*VP*/] = !0;
 
         let mut distances = Vec::with_capacity(max_words_len + 1);
         distances.push(BitDistance {
             distance: word.len(),// current is empty, so distance is the number of character to add
-            min_distance: 0,
-            min_distance_index: 0// Min distance is found at index 0
+            min_distance: 0,// Distance found
         });
 
         DamerauLevenshteinBitDistance {
@@ -323,16 +319,28 @@ impl IncrementalDistance for DamerauLevenshteinBitDistance {
         let pm = pm;
 
         let pm_1 = self.bit_vectors[offset - NB_BIT_VECTORS];
-        let do_1 = self.bit_vectors[offset + 1 - NB_BIT_VECTORS];
+        let d0_1 = self.bit_vectors[offset + 1 - NB_BIT_VECTORS];
         let vp_1 = self.bit_vectors[offset + 4 - NB_BIT_VECTORS];
         let vn_1 = self.bit_vectors[offset + 5 - NB_BIT_VECTORS];
 
-        let d0 = (((!do_1) & pm) << 1) & pm_1;
-        let d0 = d0 | (((pm & vp_1) + vp_1) ^ vp_1) | pm | vn_1;
+        //println!("pm-1: {:b}", pm_1);
+        //println!("do-1: {:b}", d0_1);
+        //println!("vp-1: {:b}", vp_1);
+        //println!("vn-1: {:b}", vn_1);
+
+        let d0 = ((!d0_1) & pm).overflowing_shl(1).0 & pm_1;
+        let d0 = d0 | (((pm & vp_1).overflowing_add(vp_1).0) ^ vp_1) | pm | vn_1;
+
+        //println!("!vp_1 {:b}", !vp_1);
+
         let hp = vn_1 | !(d0 | vp_1);
         let hn = d0 & vp_1;
-        let vp = (hn << 1) | !(d0 | (hp << 1) | 1);
-        let vn = d0 & ((hp << 1) | 1);
+
+        let hp_shiffted = hp.overflowing_shl(1).0;
+        let hn_shiffted = hn.overflowing_shl(1).0;
+
+        let vp = hn_shiffted | !(d0 | (hp_shiffted | 1));
+        let vn = d0 & (hp_shiffted | 1);
 
         // Insert all values back into the iterator
         self.bit_vectors[offset] = pm;
@@ -342,26 +350,140 @@ impl IncrementalDistance for DamerauLevenshteinBitDistance {
         self.bit_vectors[offset + 4] = vp;
         self.bit_vectors[offset + 5] = vn;
 
-        let previous_info = &self.distances[self.current.len() - 1];
-        let new_distance = previous_info.distance
-            + vp & (1 << self.word.len())
-            - vn & (1 << self.word.len());
+        //println!("pm: {:b}", pm);
+        //println!("d0: {:b}", d0);
+        //println!("vp: {:b}", vp);
+        //println!("vn: {:b}", vn);
+        //println!("hp: {:b}", hp);
+        //println!("hn: {:b}", hn);
 
+        // Construct the new distance, min distance and min distance index
+        let previous_info = &self.distances[self.current.len() - 1];
+
+        //dbg!(previous_info, unsafe { std::str::from_utf8_unchecked(&self.word) }, unsafe { std::str::from_utf8_unchecked(&self.current) });
+
+        //if self.current.starts_with("safek".as_bytes()) {
+        //    dbg!(unsafe { std::str::from_utf8_unchecked(&self.current) });
+        //}
+
+        //dbg!(previous_info.min_distance, ((vp & 1_usize.overflowing_shl(previous_info.min_distance_index as u32).0) != 0) as usize, ((vn & 1_usize.overflowing_shl(previous_info.min_distance_index as u32).0) != 0) as usize);
+
+        let word_len_mask = 1_usize.overflowing_shl(self.word.len() as u32 - 1).0;
+        let new_distance = previous_info.distance
+            + ((hp & word_len_mask) != 0) as usize
+            - ((hn & word_len_mask) != 0) as usize;
+
+        let mut new_min_distance = new_distance;
+        let mut new_min_distance_mask = word_len_mask;
+
+        while new_min_distance_mask != 0 {
+            let tmp_new_min_distance = new_min_distance
+                              - ((vp & new_min_distance_mask) != 0) as usize
+                              + ((vn & new_min_distance_mask) != 0) as usize;
+
+            new_min_distance_mask = new_min_distance_mask.overflowing_shr(1).0;
+
+            if tmp_new_min_distance < new_min_distance {
+                new_min_distance = tmp_new_min_distance;
+            }
+        }
+
+        /*
+        let min_distance_mask = 1_usize.overflowing_shl(previous_info.min_distance_index as u32).0;
         let mut new_min_distance = previous_info.min_distance
-            + vp & (1 << previous_info.min_distance_index)
-            - vn & (1 << previous_info.min_distance_index);
+            + ((hp & min_distance_mask) != 0) as usize
+            - ((hn & min_distance_mask) != 0) as usize;
 
         let mut new_min_index = previous_info.min_distance_index;
-        while (hp & (1 << (new_min_index + 1))) == 0 {
+        let mut new_min_index_mask = 1_usize.overflowing_shl(new_min_index as u32 + 1).0;
+        while (vp & new_min_index_mask) == 0 && new_min_index + 1 < self.word.len() {
             new_min_index += 1;
-            new_min_distance -= hn & (1 << new_min_index);
+            new_min_distance -= ((vn & new_min_index_mask) != 0) as usize;
+
+            new_min_index_mask = 1_usize.overflowing_shl(new_min_index as u32 + 1).0;
         }
+
+        */
+        //dbg!(new_distance, new_min_distance, new_min_index, hp, hn, word_len_mask);
 
         self.distances[self.current.len()] = BitDistance {
             distance: new_distance,
             min_distance: new_min_distance,
-            min_distance_index: new_min_index
+            //min_distance_index: new_min_index
         };
+
+
+        /*{// Debug only
+
+            // Vertical view
+            let mut distances: Vec<usize> = (0..=self.word.len()).collect();
+            for row_index in 1..=self.current.len() {
+                // For each rows
+                for column_index in 0..=self.word.len() {
+                    if column_index == 0 {
+                        distances.push(row_index);
+                    } else {
+                        let mask = 1_usize.overflowing_shl(column_index as u32 - 1).0;
+                        let new_distance = distances[(row_index - 1) * (self.word.len() + 1) + column_index]
+                                + ((self.bit_vectors[row_index * NB_BIT_VECTORS + 2] & mask) != 0) as usize
+                                - ((self.bit_vectors[row_index * NB_BIT_VECTORS + 3] & mask) != 0) as usize;
+
+                        distances.push(new_distance);
+                    }
+                }
+            }
+
+
+            if self.current.starts_with("safek".as_bytes()) {
+                eprintln!("Vertical");
+                display(self.word(), self.current(), &distances);
+            }
+
+            distances.clear();
+            distances.resize((self.word.len() + 1) * (self.current.len() + 1), 0);
+
+            (0..=self.current.len()).for_each(|value| { distances[(self.word.len() + 1) * value] = value; } );
+
+            for column_index in 1..=self.word.len() {
+                // For each columns
+                for row_index in 0..=self.current.len() {
+                    let new_value = if column_index == 0 {
+                        row_index
+                    } else {
+                        let mask = 1_usize.overflowing_shl(column_index as u32 - 1).0;
+                        distances[row_index * (self.word.len() + 1) + column_index - 1]
+                                + ((self.bit_vectors[row_index * NB_BIT_VECTORS + 4] & mask) != 0) as usize
+                                - ((self.bit_vectors[row_index * NB_BIT_VECTORS + 5] & mask) != 0) as usize
+                    };
+
+                    distances[row_index * (self.word.len() + 1) + column_index] = new_value;
+                }
+            }
+
+            if self.current.starts_with("safek".as_bytes()) {
+                eprintln!("Horizontal");
+                display(self.word(), self.current(), &distances);
+            }
+
+            fn display(word: &[u8], current: &[u8], distances: &Vec<usize>) {
+                eprint!("    ");
+                for c in word {
+                    eprint!("{} ", *c as char);
+                }
+                eprintln!("");
+
+                for row_index in 0..=current.len() {
+                    if row_index == 0 { eprint!("  ") } else { eprint!("{} ", current[row_index - 1] as char) };
+
+                    for column_index in 0..=word.len() {
+                        eprint!("{} ", distances[row_index * (word.len() + 1) + column_index]);
+                    }
+                    eprintln!("");
+                }
+            }
+        }*/
+
+        //panic!("Stop here");
 
         new_distance
     }
@@ -371,11 +493,15 @@ impl IncrementalDistance for DamerauLevenshteinBitDistance {
     }
 
     fn reset(&mut self, word: &[u8]) {
-        // Fill first bit_vectors with 0 for initialisation
+        // Keep the firsts bit_vectors for initialisation
         self.bit_vectors.resize(NB_BIT_VECTORS, 0);
+        debug_assert!(self.bit_vectors[4/*VP*/] != 0);
 
         // Clear all buffers
         self.distances.resize_with(1, Default::default);// Keep the first distance already inserted.
+        self.distances[0].distance = word.len();// To kept the correct distance
+        //debug_assert!(self.distances[0].min_distance == 1);
+
         self.current.clear();
         self.word.clear();
 
@@ -396,13 +522,35 @@ impl IncrementalDistance for DamerauLevenshteinBitDistance {
     }
 
     fn can_continue(&self, max_distance: usize) -> bool {
+        //if self.current.starts_with("safek".as_bytes()) {
+        //    let offset = self.current.len() - 2;
+        //    let mask = 3_usize.overflowing_shl(self.word.len() as u32 - 2).0;
+        //    dbg!(self.distances[self.current.len()].min_distance, max_distance);
+        //    dbg!(self.distances[offset].distance, mask);
+        //    dbg!((mask & self.bit_vectors[offset * NB_BIT_VECTORS + 4]).count_ones());
+        //    dbg!((mask & self.bit_vectors[offset * NB_BIT_VECTORS + 5]).count_ones());
+        //    dbg!(self.distances[offset].distance
+        //            // Addition and substraction are inverted as we are going backward
+        //            - (mask & self.bit_vectors[offset * NB_BIT_VECTORS + 4]).count_ones() as usize
+        //            + (mask & self.bit_vectors[offset * NB_BIT_VECTORS + 5]).count_ones() as usize);
+        //    for d in self.distances.iter() {
+        //        dbg!(d);
+        //    }
+        //}
+
         // There is still a possibility of inferior distance in the row
         self.distances[self.current.len()].min_distance <= max_distance ||
             (self.current.len() >= 2 &&
              self.word.len() >= 2 && {
                 // Test for replacement distance < max_distance.
+                let offset = self.current.len() - 2;
+                let mask = 3_usize.overflowing_shl(self.word.len() as u32 - 2).0;
 
-                false
+                (self.distances[offset].distance
+                    // Addition and substraction are inverted as we are going backward
+                    - (mask & self.bit_vectors[offset * NB_BIT_VECTORS + 4]).count_ones() as usize
+                    + (mask & self.bit_vectors[offset * NB_BIT_VECTORS + 5]).count_ones() as usize)
+                    < max_distance
              })
     }
 }
@@ -498,7 +646,7 @@ mod tests {
         assert_ne!(0, calculated_distance);
     }
 
-    //#[test]
+    #[test]
     fn bit_creation() {
         {
             let word = "test";
@@ -523,7 +671,7 @@ mod tests {
         }
     }
 
-    //#[test]
+    #[test]
     fn bit_distance() {
         for (word_1, word_2, distance) in [
             ("kitten", "sitting", 3),
@@ -533,6 +681,8 @@ mod tests {
             ("Pomatomus", "Pomatomus", 0),
             ("kynar", "kaynar", 1),
             ("kynar", "kayna", 2),
+            ("muahahah", "muhahahah", 1),
+            ("sakit", "safekit", 2),
         ].iter() {
             let mut distance_calculator = DamerauLevenshteinBitDistance::new_with_words_len(word_1.as_bytes(), word_2.len());
             let calculated_distance = word_2
