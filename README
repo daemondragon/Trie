@@ -167,3 +167,45 @@ Testing query file "./split/query_100000_25_75.txt"
 distance: 0, time: 0 ms (+- 0 ms) => 3000000 query/sec (+- 0 query)
 distance: 1, time: 691 ms (+- 4 ms) => 4341 query/sec (+- 25 query)
 distance: 2, time: 6460 ms (+- 184 ms) => 464 query/sec (+- 13 query)
+
+### 3584e6a
+
+Testing trie "compiled/art_1000.bin"
+Testing query file "./split/query_1000_75_25.txt"
+distance: 0, time: 0 ms (+- 0 ms) => 1000000 query/sec (+- 0 query)
+distance: 1, time: 23 ms (+- 0 ms) => 43478 query/sec (+- 0 query)
+distance: 2, time: 66 ms (+- 2 ms) => 15151 query/sec (+- 459 query)
+Testing query file "./split/query_1000_50_50.txt"
+distance: 0, time: 0 ms (+- 0 ms) => 1000000 query/sec (+- 0 query)
+distance: 1, time: 24 ms (+- 1 ms) => 41666 query/sec (+- 1736 query)
+distance: 2, time: 70 ms (+- 4 ms) => 14285 query/sec (+- 816 query)
+Testing query file "./split/query_1000_25_75.txt"
+distance: 0, time: 0 ms (+- 0 ms) => 1000000 query/sec (+- 0 query)
+distance: 1, time: 23 ms (+- 1 ms) => 43478 query/sec (+- 1890 query)
+distance: 2, time: 67 ms (+- 1 ms) => 14925 query/sec (+- 222 query)
+Testing trie "compiled/art_10000.bin"
+Testing query file "./split/query_10000_75_25.txt"
+distance: 0, time: 0 ms (+- 0 ms) => 3000000 query/sec (+- 0 query)
+distance: 1, time: 229 ms (+- 3 ms) => 13100 query/sec (+- 171 query)
+distance: 2, time: 1071 ms (+- 90 ms) => 2801 query/sec (+- 235 query)
+Testing query file "./split/query_10000_50_50.txt"
+distance: 0, time: 0 ms (+- 0 ms) => 3000000 query/sec (+- 0 query)
+distance: 1, time: 236 ms (+- 3 ms) => 12711 query/sec (+- 161 query)
+distance: 2, time: 1075 ms (+- 99 ms) => 2790 query/sec (+- 256 query)
+Testing query file "./split/query_10000_25_75.txt"
+distance: 0, time: 0 ms (+- 0 ms) => 3000000 query/sec (+- 0 query)
+distance: 1, time: 243 ms (+- 14 ms) => 12345 query/sec (+- 711 query)
+distance: 2, time: 1395 ms (+- 402 ms) => 2150 query/sec (+- 619 query)
+Testing trie "compiled/art_100000.bin"
+Testing query file "./split/query_100000_75_25.txt"
+distance: 0, time: 0 ms (+- 0 ms) => 3000000 query/sec (+- 0 query)
+distance: 1, time: 834 ms (+- 300 ms) => 3597 query/sec (+- 1293 query)
+distance: 2, time: 4879 ms (+- 204 ms) => 614 query/sec (+- 25 query)
+Testing query file "./split/query_100000_50_50.txt"
+distance: 0, time: 0 ms (+- 0 ms) => 3000000 query/sec (+- 0 query)
+distance: 1, time: 521 ms (+- 22 ms) => 5758 query/sec (+- 243 query)
+distance: 2, time: 5075 ms (+- 347 ms) => 591 query/sec (+- 40 query)
+Testing query file "./split/query_100000_25_75.txt"
+distance: 0, time: 0 ms (+- 0 ms) => 3000000 query/sec (+- 0 query)
+distance: 1, time: 574 ms (+- 30 ms) => 5226 query/sec (+- 273 query)
+distance: 2, time: 4761 ms (+- 82 ms) => 630 query/sec (+- 10 query)

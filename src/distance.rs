@@ -198,7 +198,7 @@ impl IncrementalDistance for DamerauLevenshteinDistance {
 /// Allows to easily change type for testing or performance purpose.
 type DamerauLevenshteinBitType = usize;
 /// How many bits vectors are stored in the damerau levenshtein distance per row.
-const NB_BIT_VECTORS: usize = 6;
+const NB_BIT_VECTORS: usize = 4;
 
 #[derive(Debug, Clone, Default)]
 struct BitDistance {
@@ -231,10 +231,13 @@ pub struct DamerauLevenshteinBitDistance {
     /// Bit-vectors are stored consecutively in this order:
     /// PM: PMc[i] = 1 if A[i] = c
     /// D0: D0j[i] = 1 if D[i,j] = D[i-1,j-1]
-    /// HP: HPj[i] = 1 if D[i,j]-D[i,j-1] = 1
-    /// HN: HNj[i] = 1 if D[i,j]-D[i,j-1] = -1
     /// VP: VPj[i] = 1 if D[i,j]-D[i-1,j] = 1
     /// VN: VNj[i] = 1 if D[i,j]-D[i-1,j] = -1
+    ///
+    /// Those bit_vectors are not saved as they are not reused
+    /// after the previous one have been calculated
+    /// HP: HPj[i] = 1 if D[i,j]-D[i,j-1] = 1
+    /// HN: HNj[i] = 1 if D[i,j]-D[i,j-1] = -1
     /// Each bit-vector takes only ONE DamerauLevenshteinBitType,
     /// so it can't be used on too big distances or words.
     bit_vectors: Vec<DamerauLevenshteinBitType>,
@@ -260,7 +263,7 @@ impl DamerauLevenshteinBitDistance {
         let mut bit_vectors = Vec::with_capacity(NB_BIT_VECTORS * (max_words_len + 1));
         // Fill the first bit_vectors with zero for initialisation
         bit_vectors.resize(NB_BIT_VECTORS, 0);
-        bit_vectors[4/*VP*/] = !0;
+        bit_vectors[2/*VP*/] = !0;
 
         let mut distances = Vec::with_capacity(max_words_len + 1);
         distances.push(BitDistance {
@@ -320,10 +323,11 @@ impl IncrementalDistance for DamerauLevenshteinBitDistance {
 
         unsafe {
             // Get all previous bit_vectors
-            let pm_1 = *self.bit_vectors.get_unchecked(offset - NB_BIT_VECTORS);
-            let d0_1 = *self.bit_vectors.get_unchecked(offset + 1 - NB_BIT_VECTORS);
-            let vp_1 = *self.bit_vectors.get_unchecked(offset + 4 - NB_BIT_VECTORS);
-            let vn_1 = *self.bit_vectors.get_unchecked(offset + 5 - NB_BIT_VECTORS);
+            let previous_offset = offset - NB_BIT_VECTORS;
+            let pm_1 = *self.bit_vectors.get_unchecked(previous_offset);
+            let d0_1 = *self.bit_vectors.get_unchecked(previous_offset + 1);
+            let vp_1 = *self.bit_vectors.get_unchecked(previous_offset + 2);
+            let vn_1 = *self.bit_vectors.get_unchecked(previous_offset + 3);
 
             // Compute the new bit_vectors
             let d0 = ((!d0_1) & pm).overflowing_shl(1).0 & pm_1;
@@ -340,10 +344,8 @@ impl IncrementalDistance for DamerauLevenshteinBitDistance {
             // Insert all values back into the iterator
             *self.bit_vectors.get_unchecked_mut(offset) = pm;
             *self.bit_vectors.get_unchecked_mut(offset + 1) = d0;
-            *self.bit_vectors.get_unchecked_mut(offset + 2) = hp;
-            *self.bit_vectors.get_unchecked_mut(offset + 3) = hn;
-            *self.bit_vectors.get_unchecked_mut(offset + 4) = vp;
-            *self.bit_vectors.get_unchecked_mut(offset + 5) = vn;
+            *self.bit_vectors.get_unchecked_mut(offset + 2) = vp;
+            *self.bit_vectors.get_unchecked_mut(offset + 3) = vn;
 
             // Construct the new distance, min distance and min distance index
             let previous_info = self.distances.get_unchecked(self.current.len() - 1);
@@ -385,7 +387,7 @@ impl IncrementalDistance for DamerauLevenshteinBitDistance {
     fn reset(&mut self, word: &[u8]) {
         // Keep the firsts bit_vectors for initialisation
         self.bit_vectors.resize(NB_BIT_VECTORS, 0);
-        debug_assert!(self.bit_vectors[4/*VP*/] != 0);
+        debug_assert!(self.bit_vectors[2/*VP*/] != 0);
 
         // Clear all buffers
         self.distances.resize_with(1, Default::default);// Keep the first distance already inserted.
@@ -421,8 +423,8 @@ impl IncrementalDistance for DamerauLevenshteinBitDistance {
 
                 (self.distances[offset].distance
                     // Addition and substraction are inverted as we are going backward
-                    - (mask & self.bit_vectors[offset * NB_BIT_VECTORS + 4]).count_ones() as usize
-                    + (mask & self.bit_vectors[offset * NB_BIT_VECTORS + 5]).count_ones() as usize)
+                    - (mask & self.bit_vectors[offset * NB_BIT_VECTORS + 2/* VP */]).count_ones() as usize
+                    + (mask & self.bit_vectors[offset * NB_BIT_VECTORS + 3/* VN */]).count_ones() as usize)
                     < max_distance
              })
     }
