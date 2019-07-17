@@ -1,385 +1,236 @@
 use crate::{Compiler, WordFrequency};
-use crate::memory::{DiskMemory, MemoryAccess};
-use crate::flags::Flags;
+use super::{NodeKind, NodeHeader, NodeOffset, Node0, Node4, Node16, Node48, Node256};
 
-use super::{NodeKind, NodeHeader, NodeOffset, Node0, Node4, Node16, Node48, Node256, get, get_mut};
+use std::fs::{File, OpenOptions};
+use std::io::{Write, Seek, SeekFrom};
 
+use core::num::NonZeroUsize;
 use core::mem::size_of;
-use std::os::unix::io::AsRawFd;
-
-extern {
-    fn ftruncate(fd: i32, length: isize) -> i32;
-}
 
 /// The compiler compile the ART structure into a stored
 /// equivalent that can be directly used.
-/// For simplicity, the compiler work in three phases:
-/// -   The first phase, where word are added, when a node need
-///     to be added, the Node256 is used instead
-///     (all other nodes are never used)
-/// -   The second phase, where path are compressed
-///     to reduce the number of nodes used
-/// -   The last phase is the node compression phase.
-///     Node are compressed using the correct equivalent and rewritten
-///     so that the structure takes less memory space.
+/// This compiler need to have each element added added in order
+/// so that only a part on the structure need to be kept in memory
+/// while the other part can be directly added to the file
+/// and not modified after.
+///
+/// Each nodes are stored in memory as a Node256 for simplicity,
+/// and continuously (each parent of a node is the previous one in the vector)
+/// Nodes have their path directly compressed in memory.
+///
+/// Adding a new word are done like this:
+/// - The compiler looks where the node will need to be inserted.
+/// - Split and Path merge are done, the new nodes are not yet inserted.
+/// - Nodes that where on the old trie path are inserted in the file (last first),
+///     and nodes are rewrote so that correct file index are placed for each node
+///     Nodes inserted are compressed (Node0, Node4...) at this moment.
+/// - The new nodes are added in the in RAM vector and new word can be added next.
+///
+/// For pointer optimisation reason, the first node in the file is always
+/// the root node (even if it will be inserted last), as 0 index means that
+/// the node doesn't have a child.
 pub struct ArtCompiler {
-    /// The disk memory that is been used to save all the nodes
-    memory: DiskMemory,
-    /// How many nodes are really in memory
-    /// (nodes are added in bulk to prevent mapping the file too many times.
-    nb_nodes: usize,
+    /// Where the nodes need to be written.
+    file: File,
+    /// The nodes kept in memory, represent the full trie path
+    /// that is not yet inserted into the file.
+    nodes: Vec<RAMNode>,
+    /// The current index in the file so that each parent node know
+    /// the index of its newly inserted child.
+    file_index: usize,
+}
+
+/// Node kept in RAM.
+/// Each children not yet wrote into the file is not
+/// inserted into the node children index as the file
+/// index is not known at this point in time.
+struct RAMNode {
+    /// The Node256 used for that.
+    /// Only this kind of node is used to kept the insertion
+    /// simpler and prevent mistakes. The node is rewritten to the correct
+    /// version when it is inserted into the file.
+    node: Node256,
+    /// If it as a child, on which node it is.
+    /// As the in RAM node only represent one trie path,
+    /// it means that each node can only have one child at most,
+    /// as having two children means that the first one needs
+    /// to be wrote on the file.
+    /// If this node is the root one, this value will be ignored.
+    child: u8
 }
 
 impl ArtCompiler {
     pub fn new(filename: &str) -> Result<Self, String> {
-        let mut compiler = ArtCompiler {
-            memory: DiskMemory::new(filename, MemoryAccess::ReadWrite)?,
-            nb_nodes: 0
+
+        let mut file = OpenOptions::new()
+                        .read(true)
+                        .write(true)
+                        .create(true)
+                        .truncate(true)
+                        .open(filename)
+                        .map_err(|error| format!("Can't open file \"{}\" (reason: {})", filename, error))?;
+
+        // Reserve the root node.
+        let buffer = unsafe {
+            let ptr = &core::mem::zeroed::<Node256>() as *const Node256 as *const u8;
+            std::slice::from_raw_parts(ptr, size_of::<Node256>())
         };
 
-        compiler.add_node(Node256 {
-            header: NodeHeader {
-                frequency: None,
-                kind: NodeKind::Node256,
-                nb_children: 0,
-                path_length: 0,
-                path: [0; 7]
-            },
-            pointers: [None; 256]
-        })?;
+        file
+            .write_all(buffer)
+            .map_err(|error| format!("Can't write to file: {}", error))?;
 
-        Ok(compiler)
-    }
-
-    fn add_node(&mut self, node: Node256) -> Result<usize, String> {
-        let index = self.nb_nodes * size_of::<Node256>();
-
-        if self.memory.len() / size_of::<Node256>() == self.nb_nodes {
-            // Need to double the vector size
-            // So that not too much mmap are done per insertion
-            // The node is duplicated, but it doesn't matter as they will be overwritten
-            // by later use
-            self.memory.push(node, if self.nb_nodes == 0 { 8 } else { self.nb_nodes })?;
-        } else {
-            // Enough memory, write the node
-            unsafe {
-                std::ptr::copy(
-                    &node as *const Node256,
-                    (self.memory.data_mut() as *mut Node256).offset(self.nb_nodes as isize),
-                    1
-                );
-            }
-        }
-
-        self.nb_nodes += 1;
-        Ok(index)
-    }
-
-    fn get_256(&self, node_index: usize) -> &Node256 {
-        debug_assert!(node_index < self.nb_nodes * size_of::<Node256>());
-
-        unsafe {
-            let node: &Node256 = &*(self.memory.data().offset(node_index as isize) as *const Node256);
-
-            debug_assert!(node.header.kind == NodeKind::Node256);
-
-            node
-        }
-    }
-
-    fn get_256_mut(&self, node_index: usize) -> &mut Node256 {
-        debug_assert!(node_index < self.nb_nodes * size_of::<Node256>());
-
-        unsafe {
-            let node: &mut Node256 = &mut *(self.memory.data().offset(node_index as isize) as *mut Node256);
-
-            debug_assert!(node.header.kind == NodeKind::Node256);
-
-            node
-        }
-    }
-
-    fn add_rec(&mut self, word: &[u8], frequency: WordFrequency, node_index: usize) {
-        if !word.is_empty() {
-            // In the middle of the word.
-            if self.get_256(node_index).pointers[word[0] as usize].is_none() {
-                // Increase the children count
-                self.get_256_mut(node_index).header.nb_children += 1;
-
-                // Node absent, add it and treat it as added.
-                let child_index = self.add_node(Node256 {
-                    header: NodeHeader {
-                        frequency: None,
-                        kind: NodeKind::Node256,
-                        nb_children: 0,
-                        path_length: 0,
-                        path: [0; 7]
+        Ok(ArtCompiler {
+            file: file,
+            nodes: vec![
+                RAMNode {
+                    node: Node256 {
+                        header: NodeHeader {
+                            frequency: None,
+                            kind: NodeKind::Node256,
+                            nb_children: 0,
+                            path_length: 0,
+                            path: [0; 7]
+                        },
+                        pointers: [None; 256]
                     },
-                    pointers: [None; 256]
-                }).unwrap();
-
-                self.get_256_mut(node_index).pointers[word[0] as usize] = NodeOffset::new(child_index);
-            }
-
-            self.add_rec(&word[1..], frequency, self.get_256(node_index).pointers[word[0] as usize].unwrap().get());
-        } else {
-            self.get_256_mut(node_index).header.frequency = Some(frequency);
-        }
+                    child: 0
+                }
+            ],
+            file_index: size_of::<Node256>()
+        })
     }
 }
 
-/// All further optimisation that can be made on the ART
-/// to increase it's speed.
+impl Compiler for ArtCompiler {
+    fn add(&mut self, word: &[u8], frequency: WordFrequency) {
+        self.add_rec(word, frequency, 0).unwrap();
+    }
+
+    fn build(mut self) {
+        self.move_to_file(0).unwrap();
+    }
+}
+
 impl ArtCompiler {
-    // Compact all path that can be compressed (single children nodes)
-    // so that there is less node to iterate over when searching for words.
-    //
-    // Allows to have some nice speed-up as less memory need to be read for a word search.
-    fn path_compression(&mut self, index: usize, deleted_nodes: &mut Flags) {
+    /// Add the given word recursively.
+    /// If a new trie path is created, the new one is written to file first.
+    fn add_rec(&mut self, word: &[u8], frequency: WordFrequency, node_index: usize) -> Result<(), String> {
+        if !word.is_empty() {
+            // In the middle of the word.
+            if self.nodes[node_index].node.pointers[word[0] as usize].is_none() {
+                // Creating a new path, inserting the old path first
+                if node_index + 1 < self.nodes.len() {
+                    self.move_to_file(node_index + 1)?;
+                }
+                debug_assert!(node_index + 1 == self.nodes.len());
 
-        loop {
-            let mut node = self.get_256_mut(index);
+                // Increase the children count
+                self.nodes[node_index].node.header.nb_children += 1;
 
-            if node.header.nb_children != 1// Too much children
-            || (node.header.path_length as usize) >= node.header.path.len()// Path compression full
-            || node.header.frequency.is_some() {// Have data
+                // Telling the father that it's new child is at this character.
+                let parent_index = self.nodes.len() - 1;
+                self.nodes[parent_index].child = word[0];
 
-                break;
+                // Node absent, add it and treat it as added.
+                self.nodes.push(RAMNode {
+                    node: Node256 {
+                        header: NodeHeader {
+                            frequency: None,
+                            kind: NodeKind::Node256,
+                            nb_children: 0,
+                            path_length: 0,
+                            path: [0; 7]
+                        },
+                        pointers: [None; 256]
+                    },
+
+                    child: 0
+                });
+
+                self.nodes[node_index].node.pointers[word[0] as usize] = NodeOffset::new(parent_index + 1);
             }
 
-            // Try to compact the next node if possible
-            // and mark the next one as deleted
-            // Correct the pointers index.
-            // Break out of the loop if can't compact.
-            let (value, next_node_index) = node.pointers
-                                                .iter()
-                                                .enumerate()
-                                                .find(|(_, index)| index.is_some())
-                                                .map(|(value, index)| (value as u8, index.unwrap().get()))
-                                                .unwrap();//Have at least one, there is one children.
-
-            let next_node = self.get_256(next_node_index);
-
-            // Add the value to the compresse path
-            node.header.path[node.header.path_length as usize] = value;
-            node.header.path_length += 1;
-
-            // Copy the pointers keys to this one as they are compressed.
-            debug_assert!(next_node.header.path_length == 0, "Next node already have a compacted path");
-
-            node.pointers = next_node.pointers;
-            node.header.nb_children = next_node.header.nb_children;
-            node.header.frequency = next_node.header.frequency;
-
-            // Mark the next node as deleted
-            debug_assert!(next_node_index % size_of::<Node256>() == 0);
-            deleted_nodes.set(next_node_index / size_of::<Node256>(), true);
-        }
-
-        for child_index in 0..self.get_256(index).pointers.len() {
-            if let Some(child_index) = self.get_256(index).pointers[child_index].clone() {
-                self.path_compression(child_index.get(), deleted_nodes);
-            }
+            self.add_rec(&word[1..], frequency, self.nodes[node_index].node.pointers[word[0] as usize].unwrap().get())
+        } else {
+            self.nodes[node_index].node.header.frequency = Some(frequency);
+            Ok(())
         }
     }
 
-    // Compact all nodes so that they can use the more efficient
-    // memory layout adapted to their children count.
-    // Note that aftee this operation, there is empty space between
-    // nodes if they use smaller node version, they are not compacted together.
-    //
-    // Compacting all nodes allows for after to compact the file
-    // so that more nodes can be placed in the same memory space,
-    // allowing for another speed boost.
-    fn node_compression(&mut self, index: usize, deleted_nodes: &Flags) {
-        // The current node doesn't have been deleted
-        debug_assert!(false == deleted_nodes.get(index / size_of::<Node256>()));
+    /// Moves all nodes from the given start index to the end of self.nodes
+    /// to the file after doing some optimisation on it.
+    fn move_to_file(&mut self, start_index: usize) -> Result<(), String> {
+        self.path_compression(start_index);
+        return self.write_to_file(start_index)
+    }
 
-        // Perform the change for the children before as after the memory layout
-        // will be changed. Doing this allows to not have one loop per node kind.
-        for child_index in 0..self.get_256(index).pointers.len() {
-            if let Some(child_index) = self.get_256(index).pointers[child_index].clone() {
-                self.node_compression(child_index.get(), deleted_nodes);
+    fn path_compression(&mut self, start_index: usize) {
+        let mut index = start_index;
+
+        while index + 1 < self.nodes.len() {
+            let header = &self.nodes[index].node.header;
+
+            if header.nb_children != 1// Too much children
+            || (header.path_length as usize) >= header.path.len()// Path compression full
+            || header.frequency.is_some() {// Have data
+
+                // Try to compress the next nodes
+                index += 1;
+                continue;
             }
-        }
 
-        match self.get_256(index).header.nb_children {
-            0 => {
-                let mut node = self.get_256_mut(index);
-                node.header.kind = NodeKind::Node0;
-            },
-            1...4 => {
-                let mut node = self.get_256_mut(index);
-                node.header.kind = NodeKind::Node4;
+            let ram_node = self.nodes.remove(index);
+            // At this point, index point on the child node, not the previous one.
+            let mut header = &mut self.nodes[index].node.header;
 
-                // Change the layout
-                let mut keys: [u8; 4] = [0; 4];
-                let mut ptrs: [Option<NodeOffset>; 4] = [None; 4];
-                let mut insert_index = 0;
+            // Add the value to the compressed path (the child node have not yet being compressed)
+            header.path = ram_node.node.header.path;
+            header.path[ram_node.node.header.path_length as usize] = ram_node.child;
+            header.path_length = ram_node.node.header.path_length + 1;
 
-                for (value, pointer) in node.pointers
-                                            .iter()
-                                            .enumerate()
-                                            .filter(|(_, ptr)| ptr.is_some()) {
-
-                    debug_assert!(insert_index < 4);
-
-                    keys[insert_index] = value as u8;
-                    ptrs[insert_index] = *pointer;
-                    insert_index += 1;
-                }
-
-                let mut node = unsafe { get_mut::<Node4>(&mut self.memory, index) };
-                node.keys = keys;
-                node.pointers = ptrs;
-            },
-            5...16 => {
-                let mut node = self.get_256_mut(index);
-                node.header.kind = NodeKind::Node16;
-
-
-                // Change the layout
-                let mut keys: [u8; 16] = [0; 16];
-                let mut ptrs: [Option<NodeOffset>; 16] = [None; 16];
-                let mut insert_index = 0;
-
-                for (value, pointer) in node.pointers
-                                            .iter()
-                                            .enumerate()
-                                            .filter(|(_, ptr)| ptr.is_some()) {
-
-                    debug_assert!(insert_index < 16);
-
-                    keys[insert_index] = value as u8;
-                    ptrs[insert_index] = *pointer;
-                    insert_index += 1;
-                }
-
-                let mut node = unsafe { get_mut::<Node16>(&mut self.memory, index) };
-                node.keys = keys;
-                node.pointers = ptrs;
-            },
-            17...48 => {
-                let mut node = self.get_256_mut(index);
-                node.header.kind = NodeKind::Node48;
-
-                                // Change the layout
-                let mut keys: [u8; 256] = [core::u8::MAX; 256];
-                let mut ptrs: [Option<NodeOffset>; 48] = [None; 48];
-                let mut insert_index = 0;
-
-                for (value, pointer) in node.pointers
-                                            .iter()
-                                            .enumerate()
-                                            .filter(|(_, ptr)| ptr.is_some()) {
-
-                    debug_assert!(insert_index < 48);
-
-                    keys[value] = insert_index as u8;
-                    ptrs[insert_index] = *pointer;
-                    insert_index += 1;
-                }
-
-                let mut node = unsafe { get_mut::<Node48>(&mut self.memory, index) };
-                node.keys = keys;
-                node.pointers = ptrs;
-            },
-            _ => { /* Nothing to do, as it's the big version that need to be used */ }
+            // Don't increase the index as the nodes list have been reduced by one.
         }
     }
 
-    fn memory_compression_mapping(&self, deleted_nodes: &Flags) -> Vec<(usize, usize)> {
-        let mut mapping: Vec<(usize, usize)> = (0..self.nb_nodes)
-            .filter(|index| !deleted_nodes.get(*index))
-            .map(|index| index * size_of::<Node256>())
-            .map(|index| (index, index))
-            .collect();
+    /// Write to file all nodes from the end of self.nodes to the given starting index
+    /// They are transformed to the correct version before being inserted
+    /// so that the least amount of memory possible is used.
+    fn write_to_file(&mut self, start_index: usize) -> Result<(), String> {
+        // Inserting children first to have correct inserted index
+        while start_index < self.nodes.len() {
 
-        assert!(mapping.len() > 0);
-        assert_eq!(0, mapping[0].0);
-        assert_eq!(0, mapping[0].1);
+            let is_root = self.nodes.len() <= 1;
 
-        let mut next_position = 0;
-        mapping
-            .iter_mut()
-            .for_each(|it| {
-                debug_assert!(next_position <= it.0);
-
-                it.1 = next_position;
-                let header = unsafe { get::<NodeHeader>(&self.memory, it.0) };
-
-                next_position += match header.kind {
-                    NodeKind::Node0 => size_of::<Node0>(),
-                    NodeKind::Node4 => size_of::<Node4>(),
-                    NodeKind::Node16 => size_of::<Node16>(),
-                    NodeKind::Node48 => size_of::<Node48>(),
-                    NodeKind::Node256 => size_of::<Node256>()
-                };
-            });
-
-        return mapping;
-    }
-
-    fn rewritte_nodes(&mut self, mapping: &Vec<(usize, usize)>) {
-        for index in mapping.iter().map(|(_, new)| new) {
-
-            match (unsafe { get::<NodeHeader>(&self.memory, *index) }).kind {
-                NodeKind::Node0 => { /* No more thing to do */ },
-                NodeKind::Node4 => {
-                    let mut node = unsafe { get_mut::<Node4>(&mut self.memory, *index) };
-
-                    for ptr_index in 0..node.header.nb_children {
-                        node.pointers[ptr_index as usize] = mapping
-                            .iter()
-                            .find(|(old, _)| *old == node.pointers[ptr_index as usize].unwrap().get())
-                            .map(|(_, new)| NodeOffset::new(*new).unwrap());
-                    }
-                },
-                NodeKind::Node16 => {
-                    let mut node = unsafe { get_mut::<Node16>(&mut self.memory, *index) };
-
-                    for ptr_index in 0..node.header.nb_children {
-                        node.pointers[ptr_index as usize] = mapping
-                            .iter()
-                            .find(|(old, _)| *old == node.pointers[ptr_index as usize].unwrap().get())
-                            .map(|(_, new)| NodeOffset::new(*new).unwrap());
-                    }
-                },
-                NodeKind::Node48 => {
-                    let mut node = unsafe { get_mut::<Node48>(&mut self.memory, *index) };
-
-                    for ptr_index in 0..node.header.nb_children {
-                        node.pointers[ptr_index as usize] = mapping
-                            .iter()
-                            .find(|(old, _)| *old == node.pointers[ptr_index as usize].unwrap().get())
-                            .map(|(_, new)| NodeOffset::new(*new).unwrap());
-                    }
-
-                },
-                NodeKind::Node256 => {
-                    let mut node = unsafe { get_mut::<Node256>(&mut self.memory, *index) };
-
-                    for ptr_index in 0..256 {
-                        if node.pointers[ptr_index as usize].is_none() {
-                            continue;
-                        }
-
-                        node.pointers[ptr_index as usize] = mapping
-                            .iter()
-                            .find(|(old, _)| *old == node.pointers[ptr_index as usize].unwrap().get())
-                            .map(|(_, new)| NodeOffset::new(*new).unwrap());
-                    }
-                }
+            // Modifying the parent to add the newly node that will be inserted.
+            if !is_root {
+                let parent_index = self.nodes.len() - 2;
+                let parent = &mut self.nodes[parent_index];
+                parent.node.pointers[parent.child as usize] = NonZeroUsize::new(self.file_index);
+            } else {
+                // The node have no parent, it's the root node, inserting it at the start of the file.
+                self.file
+                    .seek(SeekFrom::Start(0))
+                    .map_err(|error| format!("Can't go to the end of the file: {}", error))?;
             }
-        }
 
-        // Truncate the file so that it is shorter
-        // to remove useless node at the end.
-        unsafe {
-            let last_index = mapping.last().unwrap().1;
-            let header = get::<NodeHeader>(&self.memory, last_index);
+            // To what kind of node the newly node need to be transformed to ?
+            let node = &self.nodes.last().unwrap().node;
+            let new_type = if is_root {
+                // Don't compact the root node as the place is taken anyways.
+                NodeKind::Node256
+            } else {
+                match node.header.nb_children {
+                    0       => NodeKind::Node0,
+                    1...4   => NodeKind::Node4,
+                    5...16  => NodeKind::Node16,
+                    17...48 => NodeKind::Node48,
+                    _       => NodeKind::Node256,
+                }
+            };
 
-            let end = last_index + match header.kind {
+            // Advancing the file_index
+            self.file_index += match new_type {
                 NodeKind::Node0 => size_of::<Node0>(),
                 NodeKind::Node4 => size_of::<Node4>(),
                 NodeKind::Node16 => size_of::<Node16>(),
@@ -387,52 +238,30 @@ impl ArtCompiler {
                 NodeKind::Node256 => size_of::<Node256>()
             };
 
-            ftruncate(self.memory.file().as_raw_fd(), end as isize);
-        }
-    }
-
-    /// Compress the trie in memory so that less space need to be fetched
-    /// while searching for a word.
-    fn memory_compression(&mut self, deleted_nodes: &Flags) {
-        let mapping = self.memory_compression_mapping(deleted_nodes);
-
-        // Moving all nodes.
-        for (old_index, next_index) in mapping.iter() {
-            debug_assert!(next_index <= old_index);
-
-            unsafe {
-                let size = match get::<NodeHeader>(&self.memory, *old_index).kind {
-                    NodeKind::Node0 => size_of::<Node0>(),
-                    NodeKind::Node4 => size_of::<Node4>(),
-                    NodeKind::Node16 => size_of::<Node16>(),
-                    NodeKind::Node48 => size_of::<Node48>(),
-                    NodeKind::Node256 => size_of::<Node256>()
+            fn write_node_to_file<T: Sized>(file: &mut File, node: T) -> Result<(), String> {
+                let buffer = unsafe {
+                    let ptr = &node as *const T as *const u8;
+                    std::slice::from_raw_parts(ptr, size_of::<T>())
                 };
 
-                std::ptr::copy(
-                    self.memory.data().offset(*old_index as isize) as *const u8,
-                    self.memory.data().offset(*next_index as isize) as *mut u8,
-                    size
-                );
+                file
+                    .write_all(buffer)
+                    .map_err(|error| format!("Can't write to file: {}", error))?;
+
+                Ok(())
+            }
+
+            // Transforming the node and inserting it in the file.
+            let node = self.nodes.pop().unwrap().node;
+            match new_type {
+                NodeKind::Node0 => write_node_to_file::<Node0>(&mut self.file, node.into())?,
+                NodeKind::Node4 => write_node_to_file::<Node4>(&mut self.file, node.into())?,
+                NodeKind::Node16 => write_node_to_file::<Node16>(&mut self.file, node.into())?,
+                NodeKind::Node48 => write_node_to_file::<Node48>(&mut self.file, node.into())?,
+                NodeKind::Node256 => write_node_to_file::<Node256>(&mut self.file, node.into())?,
             }
         }
 
-        // Rewritting nodes to match the new mapping
-        self.rewritte_nodes(&mapping);
-    }
-}
-
-impl Compiler for ArtCompiler {
-    fn add(&mut self, word: &[u8], frequency: WordFrequency)
-    {
-        self.add_rec(word, frequency, 0);
-    }
-
-    fn build(mut self) {
-        let mut deleted_nodes = Flags::new(self.memory.len() / size_of::<Node256>());
-
-        self.path_compression(0, &mut deleted_nodes);
-        self.node_compression(0, &deleted_nodes);
-        self.memory_compression(&deleted_nodes);
+        Ok(())
     }
 }

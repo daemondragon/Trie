@@ -104,7 +104,7 @@ fn bench() {
 
 fn main() {
     if let Some(arg) = std::env::args().nth(1) {
-        let trie = ArtSearch::load("compiled/art_1000.bin").unwrap();
+        let trie = ArtSearch::load("art_new.bin").unwrap();
 
         match &*arg {
             "graph" => trie.graph(),

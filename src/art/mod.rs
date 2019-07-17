@@ -134,10 +134,119 @@ unsafe fn get<T: Sized>(memory: &DiskMemory, offset: usize) -> &T {
     &*(memory.data().offset(offset as isize) as *const T)
 }
 
-unsafe fn get_mut<T: Sized>(memory: &mut DiskMemory, offset: usize) -> &mut T {
-    debug_assert!(offset + core::mem::size_of::<T>() <= memory.len());
+/// Allows to easily transform a Node256 into a Node0
+impl From<Node256> for Node0 {
+    fn from(node: Node256) -> Self {
+        debug_assert!(node.header.nb_children == 0, "Node must node have children");
 
-    &mut *(memory.data().offset(offset as isize) as *mut T)
+        let mut new_node = Node0 {
+            header: node.header
+        };
+        new_node.header.kind = NodeKind::Node0;
+
+        return new_node;
+    }
+}
+
+/// Allows to easily transform a Node256 into a Node4
+impl From<Node256> for Node4 {
+    fn from(node: Node256) -> Self {
+        debug_assert!(node.header.nb_children <= 4, "Node must node have more than 4 children");
+
+        // Change the layout
+        let mut keys: [u8; 4] = [0; 4];
+        let mut ptrs: [Option<NodeOffset>; 4] = [None; 4];
+        let mut insert_index = 0;
+
+        for (value, pointer) in node.pointers
+                                    .iter()
+                                    .enumerate()
+                                    .filter(|(_, ptr)| ptr.is_some()) {
+
+            debug_assert!(insert_index < 4);
+
+            keys[insert_index] = value as u8;
+            ptrs[insert_index] = *pointer;
+            insert_index += 1;
+        }
+
+        let mut new_node = Node4 {
+            header: node.header,
+            keys: keys,
+            pointers: ptrs
+        };
+
+        new_node.header.kind = NodeKind::Node4;
+
+        return new_node;
+    }
+}
+
+/// Allows to easily transform a Node256 into a Node16
+impl From<Node256> for Node16 {
+    fn from(node: Node256) -> Self {
+        debug_assert!(node.header.nb_children <= 16, "Node must node have more than 16 children");
+
+        // Change the layout
+        let mut keys: [u8; 16] = [0; 16];
+        let mut ptrs: [Option<NodeOffset>; 16] = [None; 16];
+        let mut insert_index = 0;
+
+        for (value, pointer) in node.pointers
+                                    .iter()
+                                    .enumerate()
+                                    .filter(|(_, ptr)| ptr.is_some()) {
+
+            debug_assert!(insert_index < 16);
+
+            keys[insert_index] = value as u8;
+            ptrs[insert_index] = *pointer;
+            insert_index += 1;
+        }
+
+        let mut new_node = Node16 {
+            header: node.header,
+            keys: keys,
+            pointers: ptrs
+        };
+
+        new_node.header.kind = NodeKind::Node16;
+
+        return new_node;
+    }
+}
+
+/// Allows to easily transform a Node256 into a Node16
+impl From<Node256> for Node48 {
+    fn from(node: Node256) -> Self {
+        debug_assert!(node.header.nb_children <= 48, "Node must node have more than 16 children");
+
+        // Change the layout
+        let mut keys: [u8; 256] = [core::u8::MAX; 256];
+        let mut ptrs: [Option<NodeOffset>; 48] = [None; 48];
+        let mut insert_index = 0;
+
+        for (value, pointer) in node.pointers
+                                    .iter()
+                                    .enumerate()
+                                    .filter(|(_, ptr)| ptr.is_some()) {
+
+        debug_assert!(insert_index < 48);
+
+            keys[value] = insert_index as u8;
+            ptrs[insert_index] = *pointer;
+            insert_index += 1;
+        }
+
+        let mut new_node = Node48 {
+            header: node.header,
+            keys: keys,
+            pointers: ptrs
+        };
+        new_node.header.kind = NodeKind::Node48;
+
+        return new_node;
+    }
 }
 
 #[cfg(test)]

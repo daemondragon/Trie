@@ -16,6 +16,7 @@ pub struct Dictionary {
 
 /// Represent a line in the dictionary file.
 /// It is what the dictionary iterate over.
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
 pub struct DictionaryLine {
     pub word: String,
     pub frequency: NonZeroU32

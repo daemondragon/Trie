@@ -1,5 +1,5 @@
 use crate::{Search, Information, WordData};
-use crate::memory::{DiskMemory, MemoryAccess};
+use crate::memory::DiskMemory;
 use crate::distance::IncrementalDistance;
 
 use super::{NodeKind, NodeHeader, Node0, Node4, Node16, Node48, Node256, get};
@@ -12,7 +12,7 @@ pub struct ArtSearch {
 impl ArtSearch {
     pub fn load(filename: &str) -> Result<Self, String> {
         Ok(ArtSearch {
-            memory: DiskMemory::open(filename, MemoryAccess::ReadOnly)?
+            memory: DiskMemory::open(filename)?
         })
     }
 }

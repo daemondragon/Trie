@@ -1,7 +1,7 @@
 extern crate trie;
 
 use trie::{Compiler, art::ArtCompiler};
-use trie::dictionary::Dictionary;
+use trie::dictionary::{Dictionary, DictionaryLine};
 use trie::limit::Limit;
 
 fn main() {
@@ -16,7 +16,11 @@ fn main() {
         &std::env::args().nth(2).expect("Missing compiled file as second argument")
     ).unwrap();
 
-    for line in dictionary {
+    // Sort lines so that the compiler can be smarter.
+    let mut lines: Vec<DictionaryLine> = dictionary.into_iter().collect();
+    lines.sort();
+
+    for line in lines {
         compiler.add(line.word.as_bytes(), line.frequency);
     }
 
