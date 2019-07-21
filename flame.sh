@@ -1,4 +1,5 @@
 binary="target/release/TextMiningApp"
+prefix="ref"
 ratio_list=(25 50 75)
 amount_list=(1000 10000 100000)
 
@@ -8,7 +9,7 @@ mkdir -p "record"
 
 for amount in "${amount_list[@]}"
 do
-    compiled_file="compiled/art_${amount}.bin"
+    compiled_file="compiled/${prefix}_${amount}.bin"
 
     for ratio in "${ratio_list[@]}"
     do

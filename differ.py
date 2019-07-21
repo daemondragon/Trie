@@ -7,11 +7,13 @@ SEARCH_STRUCTURE_LIST = [
     "name": "art",
     "compiler": "target/release/TextMiningCompiler",
     "searcher": "target/release/TextMiningApp",
+    "prefix": "ref"
 },
 {
     "name": "ref",
     "compiler": "ref/linux64/TextMiningCompiler",
     "searcher": "ref/linux64/TextMiningApp",
+    "prefix": "ref"
 }
 ]
 
@@ -51,14 +53,13 @@ for amount in AMOUNT_LIST:
             for search in SEARCH_STRUCTURE_LIST:
                 print("Launching {}".format(search['name']))
                 process = subprocess.run(\
-                    [search["searcher"], "compiled/{}_{}.bin".format(search['name'], amount)],\
+                    [search["searcher"], "compiled/{}_{}.bin".format(search['prefix'], amount)],\
                     input=to_search, encoding="ascii",\
                     stdout=subprocess.PIPE\
                 )
 
                 results.append({
                     "stdout" : process.stdout
-                    #TODO: add time
                 })
 
             for index in range(len(results) - 1):

@@ -4,7 +4,7 @@ use std::num::NonZeroU32;
 use std::time::Instant;
 use core::cmp::max;
 
-use trie::{Compiler, Search, Information, art::{ArtCompiler, ArtSearch}};
+use trie::{Compiler, Search, Information, art::{ArtCompiler, ArtSearch}, trie::TrieSearch};
 use trie::distance::{IncrementalDistance, DamerauLevenshteinDistance, DamerauLevenshteinBitDistance};
 use trie::dictionary::{Dictionary, DictionaryLine};
 
@@ -40,9 +40,9 @@ fn basic_test() {
 
 fn bench() {
     for amount in [1_000, 10_000, 100_000].iter() {
-        let trie_filename = format!("compiled/art_{}.bin", amount);
+        let trie_filename = format!("compiled/ref_{}.bin", amount);
         println!("Testing trie \"{}\"", trie_filename);
-        let trie = ArtSearch::load(&trie_filename).unwrap();
+        let trie = TrieSearch::load(&trie_filename).unwrap();
 
         // Starting by the good query first as they are more representative
         // of the real performance of the algorithm.
@@ -104,7 +104,7 @@ fn bench() {
 
 fn main() {
     if let Some(arg) = std::env::args().nth(1) {
-        let trie = ArtSearch::load("art_new.bin").unwrap();
+        let trie = ArtSearch::load("compiled/art_1000.bin").unwrap();
 
         match &*arg {
             "graph" => trie.graph(),

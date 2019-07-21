@@ -1,6 +1,7 @@
 pub mod dictionary;
 pub mod distance;
 pub mod limit;
+pub mod trie;
 pub mod art;
 
 mod memory;

@@ -3,7 +3,7 @@ extern crate trie;
 use std::io::{self, StdoutLock, BufRead, Write};
 use core::str::from_utf8_unchecked;
 
-use trie::{WordData, Search, art::ArtSearch};
+use trie::{WordData, Search, art::ArtSearch, trie::TrieSearch};
 use trie::distance::{IncrementalDistance, DamerauLevenshteinDistance, DamerauLevenshteinBitDistance};
 use trie::limit::Limit;
 
@@ -18,7 +18,7 @@ fn main() {
     // Add a limit of memory to test in real condition.
     Limit::Memory(512 * 1024 * 1024/* 512 MB*/).apply();
 
-    let searcher = ArtSearch::load(
+    let searcher = TrieSearch::load(
         &std::env::args().nth(1).expect("Missing compiled file as argument")
     ).expect("Could not load the compiled structure");
 
