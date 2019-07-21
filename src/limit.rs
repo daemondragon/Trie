@@ -1,5 +1,8 @@
-extern {
-    #[cfg_attr(all(target_os = "macos", target_arch = "x86"), link_name = "setrlimit$UNIX2003")]
+extern "C" {
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86"),
+        link_name = "setrlimit$UNIX2003"
+    )]
     fn setrlimit(resource: i32, rlim: *const rlimit) -> i32;
 }
 
@@ -24,11 +27,14 @@ impl Limit {
     /// Apply the limit and return if it could be applied or not.
     pub fn apply(self) -> bool {
         let (max, kind) = match self {
-            Limit::Memory(value)  => (value, 2/* RLIMIT_DATA */),
-            Limit::CPUTime(value) => (value, 0/* RLIMIT_CPU */),
+            Limit::Memory(value) => (value, 2 /* RLIMIT_DATA */),
+            Limit::CPUTime(value) => (value, 0 /* RLIMIT_CPU */),
         };
 
-        let limit = rlimit { rlim_cur: max, rlim_max: max };
+        let limit = rlimit {
+            rlim_cur: max,
+            rlim_max: max,
+        };
         unsafe { setrlimit(kind, &limit) == 0 }
     }
 }

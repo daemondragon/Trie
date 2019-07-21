@@ -1,26 +1,35 @@
 extern crate trie;
 
-use std::io::{self, StdoutLock, BufRead, Write};
 use core::str::from_utf8_unchecked;
+use std::io::{self, BufRead, StdoutLock, Write};
 
-use trie::{WordData, Search, art::ArtSearch};
-use trie::distance::{IncrementalDistance, DamerauLevenshteinDistance, DamerauLevenshteinBitDistance};
+use trie::distance::{
+    DamerauLevenshteinBitDistance, DamerauLevenshteinDistance, IncrementalDistance,
+};
 use trie::limit::Limit;
+use trie::{art::ArtSearch, Search, WordData};
 
-fn write_word_data(stdout: &mut StdoutLock, data: &WordData)
-{
+fn write_word_data(stdout: &mut StdoutLock, data: &WordData) {
     let word = unsafe { from_utf8_unchecked(&data.word) };
 
-    write!(stdout, "{{\"word\":\"{}\",\"freq\":{},\"distance\":{}}}", word, data.frequency, data.distance).unwrap();
+    write!(
+        stdout,
+        "{{\"word\":\"{}\",\"freq\":{},\"distance\":{}}}",
+        word, data.frequency, data.distance
+    )
+    .unwrap();
 }
 
 fn main() {
     // Add a limit of memory to test in real condition.
-    Limit::Memory(512 * 1024 * 1024/* 512 MB*/).apply();
+    Limit::Memory(512 * 1024 * 1024 /* 512 MB*/).apply();
 
     let searcher = ArtSearch::load(
-        &std::env::args().nth(1).expect("Missing compiled file as argument")
-    ).expect("Could not load the compiled structure");
+        &std::env::args()
+            .nth(1)
+            .expect("Missing compiled file as argument"),
+    )
+    .expect("Could not load the compiled structure");
 
     let stdin = io::stdin();
     let mut stdin = stdin.lock();
@@ -34,15 +43,16 @@ fn main() {
 
     while let Ok(nb_read) = stdin.read_line(&mut line) {
         if nb_read == 0 {
-            break;// End of file, nothing more to read.
+            break; // End of file, nothing more to read.
         }
 
         let mut words = line.split_whitespace();
         let max_distance = str::parse(
             words
                 .nth(1)
-                .expect("Expected a second argument: the distance")
-        ).expect("The distance is not a number");
+                .expect("Expected a second argument: the distance"),
+        )
+        .expect("The distance is not a number");
 
         let word = words
             .next()
@@ -59,19 +69,19 @@ fn main() {
             searcher.search(&mut leveinshtein, max_distance)
         };
 
-        line.clear();// To prevent reading the same line again and again
+        line.clear(); // To prevent reading the same line again and again
         write!(stdout, "[").unwrap();
 
-        results
-            .next()
-            .map(|result| write_word_data(&mut stdout, &result));
+        if let Some(result) = results.next() {
+            write_word_data(&mut stdout, &result);
+        }
 
         for result in results {
             write!(stdout, ",").unwrap();
             write_word_data(&mut stdout, &result);
         }
 
-        write!(stdout, "]\n").unwrap();
+        writeln!(stdout, "]").unwrap();
         stdout.flush().unwrap();
     }
 }

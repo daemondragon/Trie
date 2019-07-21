@@ -1,12 +1,18 @@
-use std::os::unix::io::AsRawFd;
 use std::fs::File;
 use std::io::{Seek, SeekFrom};
+use std::os::unix::io::AsRawFd;
 
 // All C function that need to be called.
-extern {
-    #[cfg_attr(all(target_os = "macos", target_arch = "x86"), link_name = "mmap$UNIX2003")]
+extern "C" {
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86"),
+        link_name = "mmap$UNIX2003"
+    )]
     fn mmap(addr: *mut i8, len: usize, prot: i32, flags: i32, fd: i32, offset: isize) -> *mut i8;
-    #[cfg_attr(all(target_os = "macos", target_arch = "x86"), link_name = "munmap$UNIX2003")]
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86"),
+        link_name = "munmap$UNIX2003"
+    )]
     fn munmap(addr: *mut i8, len: usize) -> i32;
 }
 
@@ -31,31 +37,40 @@ impl DiskMemory {
     /// the correct type.
     pub fn open(filename: &str) -> Result<Self, String> {
         let mut file = File::open(filename)
-                                .map_err(|error| format!("Can't create new memory for \"{}\" ({})", filename, error))?;
-
+            .map_err(|error| format!("Can't create new memory for \"{}\" ({})", filename, error))?;
 
         let fd = file.as_raw_fd();
-        let len = file.seek(SeekFrom::End(0))
-                      .map_err(|error| format!("Can't tell file size {}", error))? as usize;
+        let len = file
+            .seek(SeekFrom::End(0))
+            .map_err(|error| format!("Can't tell file size {}", error))? as usize;
 
         let ptr: *mut u8;
 
         if len != 0 {
             ptr = unsafe {
-                mmap(std::ptr::null_mut(), len, 1 /*Read Only*/, 0x0002 /* MAP_PRIVATE */, fd, 0) as *mut u8
+                mmap(
+                    std::ptr::null_mut(),
+                    len,
+                    1,      /*Read Only*/
+                    0x0002, /* MAP_PRIVATE */
+                    fd,
+                    0,
+                ) as *mut u8
             };
 
             if ptr == !0 as *mut u8 {
-                return Err(String::from("Could not mmap, need file with same rights as those requested"));
+                return Err(String::from(
+                    "Could not mmap, need file with same rights as those requested",
+                ));
             }
         } else {
             ptr = std::mem::align_of::<u8>() as *mut u8;
         }
 
         Ok(DiskMemory {
-            file: file,
+            file,
             data: ptr,
-            length: len
+            length: len,
         })
     }
 

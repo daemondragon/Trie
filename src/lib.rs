@@ -1,12 +1,12 @@
+pub mod art;
 pub mod dictionary;
 pub mod distance;
 pub mod limit;
-pub mod art;
 
 mod memory;
 
-use core::num::NonZeroU32;
 use core::cmp::Ordering;
+use core::num::NonZeroU32;
 
 use distance::IncrementalDistance;
 
@@ -32,7 +32,7 @@ pub struct WordData {
     /// The associated data with the given word.
     pub frequency: WordFrequency,
     /// The distance from the word with the wanted
-    pub distance: usize
+    pub distance: usize,
 }
 
 impl PartialOrd for WordData {
@@ -46,7 +46,8 @@ impl Ord for WordData {
         // Order by distance (increasing)
         // then by frequency (decreasing)
         // then by word (lexicographics)
-        self.distance.cmp(&other.distance)
+        self.distance
+            .cmp(&other.distance)
             .then(other.frequency.cmp(&self.frequency))
             .then(self.word.cmp(&other.word))
     }
@@ -88,12 +89,16 @@ pub trait Search {
     /// - 3000 queries/seconds with a 0 distance.
     /// -  300 queries/seconds with a 1 distance.
     /// -   30 queries/seconds with a 2 distance.
-    fn search(&self, distance: &mut IncrementalDistance, max_distance: usize) -> Box<dyn Iterator<Item=WordData>>;
+    fn search(
+        &self,
+        distance: &mut IncrementalDistance,
+        max_distance: usize,
+    ) -> Box<dyn Iterator<Item = WordData>>;
 }
 
 /// Get information about a search structure
 /// for easy visualisation and usefull information.
-pub trait Information : Search {
+pub trait Information: Search {
     /// Get the number of words present in the structure
     fn words(&self) -> usize;
 

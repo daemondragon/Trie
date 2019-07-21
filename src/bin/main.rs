@@ -1,12 +1,17 @@
 extern crate trie;
 
+use core::cmp::max;
 use std::num::NonZeroU32;
 use std::time::Instant;
-use core::cmp::max;
 
-use trie::{Compiler, Search, Information, art::{ArtCompiler, ArtSearch}};
-use trie::distance::{IncrementalDistance, DamerauLevenshteinDistance, DamerauLevenshteinBitDistance};
 use trie::dictionary::{Dictionary, DictionaryLine};
+use trie::distance::{
+    DamerauLevenshteinBitDistance, DamerauLevenshteinDistance, IncrementalDistance,
+};
+use trie::{
+    art::{ArtCompiler, ArtSearch},
+    Compiler, Information, Search,
+};
 
 fn basic_test() {
     let mut compiler = ArtCompiler::new("test.bin").unwrap();
@@ -26,14 +31,15 @@ fn basic_test() {
             levenshtein.reset(word.as_bytes());
 
             for word_data in trie.search(&mut levenshtein, *distance) {
-                println!("word: {}, frequency: {}, distance: {}",
+                println!(
+                    "word: {}, frequency: {}, distance: {}",
                     String::from_utf8_lossy(&word_data.word),
                     word_data.frequency,
                     word_data.distance
                 );
             }
 
-            println!("");
+            println!();
         }
     }
 }
@@ -47,37 +53,49 @@ fn bench() {
         // Starting by the good query first as they are more representative
         // of the real performance of the algorithm.
         for good_query_ratio in [75, 50, 25].iter() {
-            let query_filename = format!("./split/query_{}_{}_{}.txt", amount, good_query_ratio, 100 - good_query_ratio);
+            let query_filename = format!(
+                "./split/query_{}_{}_{}.txt",
+                amount,
+                good_query_ratio,
+                100 - good_query_ratio
+            );
             println!("Testing query file \"{}\"", query_filename);
 
             // Loading all the query once to prevent loading this impacting the result.
-            let lines: Vec<DictionaryLine> = Dictionary::new(&query_filename).unwrap().into_iter().collect();
+            let lines: Vec<DictionaryLine> = Dictionary::new(&query_filename)
+                .unwrap()
+                .into_iter()
+                .collect();
             let mut levenshtein = DamerauLevenshteinDistance::new(&[]);
             let mut levenshtein_bit = DamerauLevenshteinBitDistance::new(&[]);
 
             for distance in [0, 1, 2].iter() {
-                let mut times: Vec<u128> = (0..10).map(|_| {
-                    let start = Instant::now();
+                let mut times: Vec<u128> = (0..10)
+                    .map(|_| {
+                        let start = Instant::now();
 
-                    for line in lines.iter() {
+                        for line in lines.iter() {
+                            let word = line.word.as_bytes();
 
-                        let word = line.word.as_bytes();
+                            let results = if levenshtein_bit.allows(word, *distance) {
+                                levenshtein_bit.reset(word);
+                                trie.search(&mut levenshtein_bit, *distance)
+                            } else {
+                                levenshtein.reset(word);
+                                trie.search(&mut levenshtein, *distance)
+                            };
 
-                        let results = if levenshtein_bit.allows(word, *distance) {
-                            levenshtein_bit.reset(word);
-                            trie.search(&mut levenshtein_bit, *distance)
-                        } else {
-                            levenshtein.reset(word);
-                            trie.search(&mut levenshtein, *distance)
-                        };
+                            let count = results.count();
 
-                        let count = results.count();
+                            assert!(
+                                (*good_query_ratio != 100 || *distance != 0) || count == 1,
+                                "Expected to have found a word"
+                            );
+                        }
 
-                        assert!((*good_query_ratio != 100 || *distance != 0) || count == 1, "Expected to have found a word");
-                    }
-
-                    start.elapsed().as_millis()
-                }).collect();
+                        start.elapsed().as_millis()
+                    })
+                    .collect();
 
                 times.sort();
                 // Removing outlier.
@@ -90,7 +108,8 @@ fn bench() {
                 let error = max(median - min_time, max_time - median);
                 let query = lines.len() as u128 * 1000 / max(1, median);
 
-                println!("distance: {}, time: {} ms (+- {} ms) => {} query/sec (+- {} query)",
+                println!(
+                    "distance: {}, time: {} ms (+- {} ms) => {} query/sec (+- {} query)",
                     distance,
                     median,
                     error,
@@ -104,7 +123,7 @@ fn bench() {
 
 fn main() {
     if let Some(arg) = std::env::args().nth(1) {
-        let trie = ArtSearch::load("art_new.bin").unwrap();
+        let trie = ArtSearch::load("compiled/art_1000.bin").unwrap();
 
         match &*arg {
             "graph" => trie.graph(),
@@ -116,7 +135,7 @@ fn main() {
             }
             "bench" => bench(),
 
-            _ => { println!("Hello world!") },
+            _ => println!("Hello world!"),
         }
     } else {
         basic_test()

@@ -63,7 +63,7 @@ pub struct DamerauLevenshteinDistance {
     distances: Vec<usize>,
     /// For each rows, was it the minimum in it ?
     /// Used for early stopping to prevent going to far.
-    min_distances: Vec<usize>
+    min_distances: Vec<usize>,
 }
 
 impl DamerauLevenshteinDistance {
@@ -80,23 +80,21 @@ impl DamerauLevenshteinDistance {
     /// so that no other resize is needed.
     pub fn new_with_words_len(word: &[u8], max_words_len: usize) -> Self {
         let mut matrix = Vec::with_capacity((word.len() + 1) * (max_words_len + 1));
-        (0..=word.len())
-            .for_each(|value| matrix.push(value));
+        (0..=word.len()).for_each(|value| matrix.push(value));
 
         let mut min_distances = Vec::with_capacity(max_words_len + 1);
-        min_distances.push(0);//The minimum distances in the first line is 0.
+        min_distances.push(0); //The minimum distances in the first line is 0.
 
         DamerauLevenshteinDistance {
             word: word.into(),
             current: Vec::with_capacity(max_words_len),
             distances: matrix,
-            min_distances: min_distances
+            min_distances,
         }
     }
 }
 
 impl IncrementalDistance for DamerauLevenshteinDistance {
-
     fn push(&mut self, value: u8) -> usize {
         // Calculating all matrix offset at once.
         let matrix_width = self.word.len() + 1;
@@ -109,14 +107,15 @@ impl IncrementalDistance for DamerauLevenshteinDistance {
         if self.distances.len() <= offset {
             // Resizing the distances matrix if needed so that the new element
             // can be correctly inserted without any problem.
-            self.distances.resize_with(offset + matrix_width, Default::default);
+            self.distances
+                .resize_with(offset + matrix_width, Default::default);
 
             // min_distance grows at the same times as the distance matrix
-            self.min_distances.resize_with(self.current.len() + 1, Default::default);
+            self.min_distances
+                .resize_with(self.current.len() + 1, Default::default);
         }
 
-        unsafe
-        {
+        unsafe {
             let mut min_distance = self.current.len();
             *self.distances.get_unchecked_mut(offset) = min_distance;
 
@@ -126,10 +125,15 @@ impl IncrementalDistance for DamerauLevenshteinDistance {
                 let deletion = self.distances.get_unchecked(offset + index - 1) + 1;
                 let insertion = self.distances.get_unchecked(previous_offset + index) + 1;
                 let substitution = self.distances.get_unchecked(previous_offset + index - 1) + cost;
-                let transposition = if index >= 2 && self.current.len() >= 2 &&
-                    *self.word.get_unchecked(index - 2) == value && self.word.get_unchecked(index - 1) == self.current.get_unchecked(self.current.len() - 2) {
-
-                    self.distances.get_unchecked(previous_previous_offset + index - 2) + cost
+                let transposition = if index >= 2
+                    && self.current.len() >= 2
+                    && *self.word.get_unchecked(index - 2) == value
+                    && self.word.get_unchecked(index - 1)
+                        == self.current.get_unchecked(self.current.len() - 2)
+                {
+                    self.distances
+                        .get_unchecked(previous_previous_offset + index - 2)
+                        + cost
                 } else {
                     // Create a big enought value so that only 3 min are needed
                     // instead of 4. Reduce computation needed.
@@ -187,10 +191,10 @@ impl IncrementalDistance for DamerauLevenshteinDistance {
         let width = self.word.len().saturating_add(1);
         let distance_offset = self.current.len().saturating_add(1) * width - 1;
 
-        *unsafe { self.min_distances.get_unchecked(self.current.len()) } <= max_distance ||
-            (self.current.len() >= 2 &&
-                self.word.len() >= 2 &&
-                self.distances[distance_offset - 2 * width - 2] < max_distance)
+        *unsafe { self.min_distances.get_unchecked(self.current.len()) } <= max_distance
+            || (self.current.len() >= 2
+                && self.word.len() >= 2
+                && self.distances[distance_offset - 2 * width - 2] < max_distance)
     }
 }
 
@@ -207,7 +211,7 @@ struct BitDistance {
     /// The minimun distance for the current row,
     /// to knows if later call to push can makes the distance
     /// goes under the threshold or not.
-    min_distance: usize
+    min_distance: usize,
 }
 
 /// Calculate the distance between a word and all words present in a trie.
@@ -243,7 +247,7 @@ pub struct DamerauLevenshteinBitDistance {
     bit_vectors: Vec<DamerauLevenshteinBitType>,
     /// For each rows, the minimun and the current distance (in this order).
     /// Used for early stopping to prevent going to far.
-    distances: Vec<BitDistance>
+    distances: Vec<BitDistance>,
 }
 
 impl DamerauLevenshteinBitDistance {
@@ -259,7 +263,6 @@ impl DamerauLevenshteinBitDistance {
     /// Doing so allows to pre-reserve the capacity of the distance matrix
     /// so that no other resize is needed.
     pub fn new_with_words_len(word: &[u8], max_words_len: usize) -> Self {
-
         let mut bit_vectors = Vec::with_capacity(NB_BIT_VECTORS * (max_words_len + 1));
         // Fill the first bit_vectors with zero for initialisation
         bit_vectors.resize(NB_BIT_VECTORS, 0);
@@ -267,15 +270,15 @@ impl DamerauLevenshteinBitDistance {
 
         let mut distances = Vec::with_capacity(max_words_len + 1);
         distances.push(BitDistance {
-            distance: word.len(),// current is empty, so distance is the number of character to add
-            min_distance: 0,// Distance found
+            distance: word.len(), // current is empty, so distance is the number of character to add
+            min_distance: 0,      // Distance found
         });
 
         DamerauLevenshteinBitDistance {
             word: word.into(),
             current: Vec::with_capacity(max_words_len),
-            bit_vectors: bit_vectors,
-            distances: distances
+            bit_vectors,
+            distances,
         }
     }
 
@@ -288,7 +291,6 @@ impl DamerauLevenshteinBitDistance {
 }
 
 impl IncrementalDistance for DamerauLevenshteinBitDistance {
-
     fn push(&mut self, value: u8) -> usize {
         self.current.push(value);
 
@@ -296,11 +298,13 @@ impl IncrementalDistance for DamerauLevenshteinBitDistance {
 
         if self.distances.len() <= self.current.len() {
             // min_distance grows at the same times as the bit_vectors matrix
-            self.distances.resize_with(self.current.len() + 1, Default::default);
+            self.distances
+                .resize_with(self.current.len() + 1, Default::default);
 
             // Resizing the bit_vectors matrix if needed so that the new element
             // can be correctly inserted without any problem.
-            self.bit_vectors.resize(NB_BIT_VECTORS * (self.current.len() + 1), 0);
+            self.bit_vectors
+                .resize(NB_BIT_VECTORS * (self.current.len() + 1), 0);
         }
 
         // PM: PMc[i] = 1 if A[i] = c
@@ -351,8 +355,7 @@ impl IncrementalDistance for DamerauLevenshteinBitDistance {
             let previous_info = self.distances.get_unchecked(self.current.len() - 1);
 
             let word_len_mask = 1_usize.overflowing_shl(self.word.len() as u32 - 1).0;
-            let new_distance = previous_info.distance
-                + ((hp & word_len_mask) != 0) as usize
+            let new_distance = previous_info.distance + ((hp & word_len_mask) != 0) as usize
                 - ((hn & word_len_mask) != 0) as usize;
 
             // Get the new min_distance by searching it in the row.
@@ -361,8 +364,8 @@ impl IncrementalDistance for DamerauLevenshteinBitDistance {
 
             while new_min_distance_mask != 0 {
                 let tmp_new_min_distance = new_min_distance
-                                  - ((vp & new_min_distance_mask) != 0) as usize
-                                  + ((vn & new_min_distance_mask) != 0) as usize;
+                    - ((vp & new_min_distance_mask) != 0) as usize
+                    + ((vn & new_min_distance_mask) != 0) as usize;
 
                 new_min_distance_mask = new_min_distance_mask.overflowing_shr(1).0;
 
@@ -373,7 +376,7 @@ impl IncrementalDistance for DamerauLevenshteinBitDistance {
 
             *self.distances.get_unchecked_mut(self.current.len()) = BitDistance {
                 distance: new_distance,
-                min_distance: new_min_distance
+                min_distance: new_min_distance,
             };
 
             new_distance
@@ -390,8 +393,8 @@ impl IncrementalDistance for DamerauLevenshteinBitDistance {
         debug_assert!(self.bit_vectors[2/*VP*/] != 0);
 
         // Clear all buffers
-        self.distances.resize_with(1, Default::default);// Keep the first distance already inserted.
-        self.distances[0].distance = word.len();// To kept the correct distance
+        self.distances.resize_with(1, Default::default); // Keep the first distance already inserted.
+        self.distances[0].distance = word.len(); // To kept the correct distance
 
         self.current.clear();
         self.word.clear();
@@ -414,25 +417,30 @@ impl IncrementalDistance for DamerauLevenshteinBitDistance {
 
     fn can_continue(&self, max_distance: usize) -> bool {
         // There is still a possibility of inferior distance in the row
-        self.distances[self.current.len()].min_distance <= max_distance ||
-            (self.current.len() >= 2 &&
-             self.word.len() >= 2 && {
-                // Test for replacement distance < max_distance.
-                let offset = self.current.len() - 2;
-                let mask = 3_usize.overflowing_shl(self.word.len() as u32 - 2).0;
+        self.distances[self.current.len()].min_distance <= max_distance
+            || (self.current.len() >= 2
+                && self.word.len() >= 2
+                && {
+                    // Test for replacement distance < max_distance.
+                    let offset = self.current.len() - 2;
+                    let mask = 3_usize.overflowing_shl(self.word.len() as u32 - 2).0;
 
-                (self.distances[offset].distance
+                    (self.distances[offset].distance
                     // Addition and substraction are inverted as we are going backward
                     - (mask & self.bit_vectors[offset * NB_BIT_VECTORS + 2/* VP */]).count_ones() as usize
-                    + (mask & self.bit_vectors[offset * NB_BIT_VECTORS + 3/* VN */]).count_ones() as usize)
-                    < max_distance
-             })
+                        + (mask & self.bit_vectors[offset * NB_BIT_VECTORS + 3/* VN */])
+                            .count_ones() as usize)
+                        < max_distance
+                })
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{IncrementalDistance, DamerauLevenshteinDistance, DamerauLevenshteinBitDistance, NB_BIT_VECTORS};
+    use super::{
+        DamerauLevenshteinBitDistance, DamerauLevenshteinDistance, IncrementalDistance,
+        NB_BIT_VECTORS,
+    };
 
     #[test]
     fn creation() {
@@ -467,25 +475,32 @@ mod tests {
             ("Pomatomus", "Pomatomus", 0),
             ("kynar", "kaynar", 1),
             ("kynar", "kayna", 2),
-        ].iter() {
-            let mut distance_calculator = DamerauLevenshteinDistance::new_with_words_len(word_1.as_bytes(), word_2.len());
+        ]
+        .iter()
+        {
+            let mut distance_calculator =
+                DamerauLevenshteinDistance::new_with_words_len(word_1.as_bytes(), word_2.len());
             let calculated_distance = word_2
                 .as_bytes()
                 .iter()
                 .map(|value| distance_calculator.push(*value))
-                .last().unwrap_or(word_1.len());// The distance with an empty string is the length of the other string.
+                .last()
+                .unwrap_or(word_1.len()); // The distance with an empty string is the length of the other string.
 
-            assert_eq!(*distance, calculated_distance,
+            assert_eq!(
+                *distance, calculated_distance,
                 "Distance between {} and {} is wrong. Got {}, expected {} ({:?})",
-                word_1, word_2,
-                calculated_distance, distance,
-                distance_calculator
+                word_1, word_2, calculated_distance, distance, distance_calculator
             );
 
-            assert_eq!(*distance, distance_calculator.distance(),
+            assert_eq!(
+                *distance,
+                distance_calculator.distance(),
                 "Distance between {} and {} is wrong. Got {}, expected {} ({:?})",
-                word_1, word_2,
-                distance_calculator.distance(), distance,
+                word_1,
+                word_2,
+                distance_calculator.distance(),
+                distance,
                 distance_calculator
             );
         }
@@ -498,11 +513,11 @@ mod tests {
 
         let mut distance_calculator = DamerauLevenshteinDistance::new(first_word.as_bytes());
         let calculated_distance = first_word
-                .as_bytes()
-                .iter()
-                .map(|value| distance_calculator.push(*value))
-                .last()
-                .unwrap();
+            .as_bytes()
+            .iter()
+            .map(|value| distance_calculator.push(*value))
+            .last()
+            .unwrap();
 
         // This is the same word
         assert_eq!(0, calculated_distance);
@@ -511,11 +526,11 @@ mod tests {
         distance_calculator.reset(second_word.as_bytes());
 
         let calculated_distance = first_word
-                .as_bytes()
-                .iter()
-                .map(|value| distance_calculator.push(*value))
-                .last()
-                .unwrap();
+            .as_bytes()
+            .iter()
+            .map(|value| distance_calculator.push(*value))
+            .last()
+            .unwrap();
 
         // The matching word have been changed meanwhile
         assert_ne!(0, calculated_distance);
@@ -558,25 +573,32 @@ mod tests {
             ("kynar", "kayna", 2),
             ("muahahah", "muhahahah", 1),
             ("sakit", "safekit", 2),
-        ].iter() {
-            let mut distance_calculator = DamerauLevenshteinBitDistance::new_with_words_len(word_1.as_bytes(), word_2.len());
+        ]
+        .iter()
+        {
+            let mut distance_calculator =
+                DamerauLevenshteinBitDistance::new_with_words_len(word_1.as_bytes(), word_2.len());
             let calculated_distance = word_2
                 .as_bytes()
                 .iter()
                 .map(|value| distance_calculator.push(*value))
-                .last().unwrap_or(word_1.len());// The distance with an empty string is the length of the other string.
+                .last()
+                .unwrap_or(word_1.len()); // The distance with an empty string is the length of the other string.
 
-            assert_eq!(*distance, calculated_distance,
+            assert_eq!(
+                *distance, calculated_distance,
                 "Distance between {} and {} is wrong. Got {}, expected {} ({:?})",
-                word_1, word_2,
-                calculated_distance, distance,
-                distance_calculator
+                word_1, word_2, calculated_distance, distance, distance_calculator
             );
 
-            assert_eq!(*distance, distance_calculator.distance(),
+            assert_eq!(
+                *distance,
+                distance_calculator.distance(),
                 "Distance between {} and {} is wrong. Got {}, expected {} ({:?})",
-                word_1, word_2,
-                distance_calculator.distance(), distance,
+                word_1,
+                word_2,
+                distance_calculator.distance(),
+                distance,
                 distance_calculator
             );
         }

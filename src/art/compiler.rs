@@ -1,11 +1,11 @@
+use super::{Node0, Node16, Node256, Node4, Node48, NodeHeader, NodeKind, NodeOffset};
 use crate::{Compiler, WordFrequency};
-use super::{NodeKind, NodeHeader, NodeOffset, Node0, Node4, Node16, Node48, Node256};
 
 use std::fs::{File, OpenOptions};
-use std::io::{Write, Seek, SeekFrom};
+use std::io::{Seek, SeekFrom, Write};
 
-use core::num::NonZeroUsize;
 use core::mem::size_of;
+use core::num::NonZeroUsize;
 
 /// The compiler compile the ART structure into a stored
 /// equivalent that can be directly used.
@@ -56,19 +56,18 @@ struct RAMNode {
     /// as having two children means that the first one needs
     /// to be wrote on the file.
     /// If this node is the root one, this value will be ignored.
-    child: u8
+    child: u8,
 }
 
 impl ArtCompiler {
     pub fn new(filename: &str) -> Result<Self, String> {
-
         let mut file = OpenOptions::new()
-                        .read(true)
-                        .write(true)
-                        .create(true)
-                        .truncate(true)
-                        .open(filename)
-                        .map_err(|error| format!("Can't open file \"{}\" (reason: {})", filename, error))?;
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(filename)
+            .map_err(|error| format!("Can't open file \"{}\" (reason: {})", filename, error))?;
 
         // Reserve the root node.
         let buffer = unsafe {
@@ -76,28 +75,25 @@ impl ArtCompiler {
             std::slice::from_raw_parts(ptr, size_of::<Node256>())
         };
 
-        file
-            .write_all(buffer)
+        file.write_all(buffer)
             .map_err(|error| format!("Can't write to file: {}", error))?;
 
         Ok(ArtCompiler {
-            file: file,
-            nodes: vec![
-                RAMNode {
-                    node: Node256 {
-                        header: NodeHeader {
-                            frequency: None,
-                            kind: NodeKind::Node256,
-                            nb_children: 0,
-                            path_length: 0,
-                            path: [0; 7]
-                        },
-                        pointers: [None; 256]
+            file,
+            nodes: vec![RAMNode {
+                node: Node256 {
+                    header: NodeHeader {
+                        frequency: None,
+                        kind: NodeKind::Node256,
+                        nb_children: 0,
+                        path_length: 0,
+                        path: [0; 7],
                     },
-                    child: 0
-                }
-            ],
-            file_index: size_of::<Node256>()
+                    pointers: [None; 256],
+                },
+                child: 0,
+            }],
+            file_index: size_of::<Node256>(),
         })
     }
 }
@@ -115,7 +111,12 @@ impl Compiler for ArtCompiler {
 impl ArtCompiler {
     /// Add the given word recursively.
     /// If a new trie path is created, the new one is written to file first.
-    fn add_rec(&mut self, word: &[u8], frequency: WordFrequency, node_index: usize) -> Result<(), String> {
+    fn add_rec(
+        &mut self,
+        word: &[u8],
+        frequency: WordFrequency,
+        node_index: usize,
+    ) -> Result<(), String> {
         if !word.is_empty() {
             // In the middle of the word.
             if self.nodes[node_index].node.pointers[word[0] as usize].is_none() {
@@ -140,18 +141,25 @@ impl ArtCompiler {
                             kind: NodeKind::Node256,
                             nb_children: 0,
                             path_length: 0,
-                            path: [0; 7]
+                            path: [0; 7],
                         },
-                        pointers: [None; 256]
+                        pointers: [None; 256],
                     },
 
-                    child: 0
+                    child: 0,
                 });
 
-                self.nodes[node_index].node.pointers[word[0] as usize] = NodeOffset::new(parent_index + 1);
+                self.nodes[node_index].node.pointers[word[0] as usize] =
+                    NodeOffset::new(parent_index + 1);
             }
 
-            self.add_rec(&word[1..], frequency, self.nodes[node_index].node.pointers[word[0] as usize].unwrap().get())
+            self.add_rec(
+                &word[1..],
+                frequency,
+                self.nodes[node_index].node.pointers[word[0] as usize]
+                    .unwrap()
+                    .get(),
+            )
         } else {
             self.nodes[node_index].node.header.frequency = Some(frequency);
             Ok(())
@@ -162,7 +170,8 @@ impl ArtCompiler {
     /// to the file after doing some optimisation on it.
     fn move_to_file(&mut self, start_index: usize) -> Result<(), String> {
         self.path_compression(start_index);
-        return self.write_to_file(start_index)
+
+        self.write_to_file(start_index)
     }
 
     fn path_compression(&mut self, start_index: usize) {
@@ -173,7 +182,9 @@ impl ArtCompiler {
 
             if header.nb_children != 1// Too much children
             || (header.path_length as usize) >= header.path.len()// Path compression full
-            || header.frequency.is_some() {// Have data
+            || header.frequency.is_some()
+            {
+                // Have data
 
                 // Try to compress the next nodes
                 index += 1;
@@ -199,7 +210,6 @@ impl ArtCompiler {
     fn write_to_file(&mut self, start_index: usize) -> Result<(), String> {
         // Inserting children first to have correct inserted index
         while start_index < self.nodes.len() {
-
             let is_root = self.nodes.len() <= 1;
 
             // Modifying the parent to add the newly node that will be inserted.
@@ -221,11 +231,11 @@ impl ArtCompiler {
                 NodeKind::Node256
             } else {
                 match node.header.nb_children {
-                    0       => NodeKind::Node0,
-                    1...4   => NodeKind::Node4,
-                    5...16  => NodeKind::Node16,
+                    0 => NodeKind::Node0,
+                    1...4 => NodeKind::Node4,
+                    5...16 => NodeKind::Node16,
                     17...48 => NodeKind::Node48,
-                    _       => NodeKind::Node256,
+                    _ => NodeKind::Node256,
                 }
             };
 
@@ -235,7 +245,7 @@ impl ArtCompiler {
                 NodeKind::Node4 => size_of::<Node4>(),
                 NodeKind::Node16 => size_of::<Node16>(),
                 NodeKind::Node48 => size_of::<Node48>(),
-                NodeKind::Node256 => size_of::<Node256>()
+                NodeKind::Node256 => size_of::<Node256>(),
             };
 
             fn write_node_to_file<T: Sized>(file: &mut File, node: T) -> Result<(), String> {
@@ -244,8 +254,7 @@ impl ArtCompiler {
                     std::slice::from_raw_parts(ptr, size_of::<T>())
                 };
 
-                file
-                    .write_all(buffer)
+                file.write_all(buffer)
                     .map_err(|error| format!("Can't write to file: {}", error))?;
 
                 Ok(())
@@ -258,7 +267,7 @@ impl ArtCompiler {
                 NodeKind::Node4 => write_node_to_file::<Node4>(&mut self.file, node.into())?,
                 NodeKind::Node16 => write_node_to_file::<Node16>(&mut self.file, node.into())?,
                 NodeKind::Node48 => write_node_to_file::<Node48>(&mut self.file, node.into())?,
-                NodeKind::Node256 => write_node_to_file::<Node256>(&mut self.file, node.into())?,
+                NodeKind::Node256 => write_node_to_file::<Node256>(&mut self.file, node)?,
             }
         }
 
