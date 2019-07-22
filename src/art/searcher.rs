@@ -22,19 +22,15 @@ impl Search for ArtSearch {
         &self,
         distance: &mut IncrementalDistance,
         max_distance: usize,
-    ) -> Box<dyn Iterator<Item = WordData>> {
+        results: &mut Vec<WordData>,
+    ) {
         if max_distance == 0 {
-            Box::new(
-                self.exact_search(0, distance.word(), distance.word())
-                    .into_iter(),
-            )
+            if let Some(data) = self.exact_search(0, distance.word(), distance.word()) {
+                results.push(data);
+            }
         } else {
-            let mut result = Vec::new();
-
-            self.distance_search(0, distance, max_distance, &mut result);
-
-            result.sort();
-            Box::new(result.into_iter())
+            self.distance_search(0, distance, max_distance, results);
+            results.sort();
         }
     }
 }

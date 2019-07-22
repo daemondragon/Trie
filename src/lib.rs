@@ -78,7 +78,7 @@ pub trait Compiler {
 /// Note that the RAM usage can't be more than 512M.
 pub trait Search {
     /// Search for all the words under some given distance
-    /// of the wanted word and return an iterator on all found words.
+    /// of the wanted word and add all the found word to the input buffer.
     /// The returned values must be correctly ordered.
     ///
     /// The given distance must be "clean": It must just have been created
@@ -93,7 +93,8 @@ pub trait Search {
         &self,
         distance: &mut IncrementalDistance,
         max_distance: usize,
-    ) -> Box<dyn Iterator<Item = WordData>>;
+        results: &mut Vec<WordData>,
+    );
 }
 
 /// Get information about a search structure

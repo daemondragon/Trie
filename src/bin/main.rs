@@ -10,7 +10,7 @@ use trie::distance::{
 };
 use trie::{
     art::{ArtCompiler, ArtSearch},
-    Compiler, Information, Search,
+    Compiler, Information, Search, WordData,
 };
 
 fn basic_test() {
@@ -23,14 +23,18 @@ fn basic_test() {
 
     let trie = ArtSearch::load("test.bin").unwrap();
     let mut levenshtein = DamerauLevenshteinDistance::new(&[]);
+    let mut results = Vec::<WordData>::new();
 
     for distance in [0, 1, 2, 3, 4].iter() {
         for word in ["test", "a", "b", "other", "ab"].iter() {
             println!("Searching {}, distance {}", word, distance);
 
             levenshtein.reset(word.as_bytes());
+            results.clear();
 
-            for word_data in trie.search(&mut levenshtein, *distance) {
+            trie.search(&mut levenshtein, *distance, &mut results);
+
+            for word_data in results.iter() {
                 println!(
                     "word: {}, frequency: {}, distance: {}",
                     String::from_utf8_lossy(&word_data.word),
@@ -66,8 +70,10 @@ fn bench() {
                 .unwrap()
                 .into_iter()
                 .collect();
+
             let mut levenshtein = DamerauLevenshteinDistance::new(&[]);
             let mut levenshtein_bit = DamerauLevenshteinBitDistance::new(&[]);
+            let mut results = Vec::<WordData>::new();
 
             for distance in [0, 1, 2].iter() {
                 let mut times: Vec<u128> = (0..10)
@@ -77,15 +83,16 @@ fn bench() {
                         for line in lines.iter() {
                             let word = line.word.as_bytes();
 
-                            let results = if levenshtein_bit.allows(word, *distance) {
+                            results.clear();
+                            if levenshtein_bit.allows(word, *distance) {
                                 levenshtein_bit.reset(word);
-                                trie.search(&mut levenshtein_bit, *distance)
+                                trie.search(&mut levenshtein_bit, *distance, &mut results);
                             } else {
                                 levenshtein.reset(word);
-                                trie.search(&mut levenshtein, *distance)
+                                trie.search(&mut levenshtein, *distance, &mut results)
                             };
 
-                            let count = results.count();
+                            let count = results.len();
 
                             assert!(
                                 (*good_query_ratio != 100 || *distance != 0) || count == 1,

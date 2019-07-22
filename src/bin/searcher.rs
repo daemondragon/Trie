@@ -41,6 +41,8 @@ fn main() {
     let mut leveinshtein = DamerauLevenshteinDistance::new(&[]);
     let mut leveinshtein_bit = DamerauLevenshteinBitDistance::new(&[]);
 
+    let mut results = Vec::<WordData>::new();
+
     while let Ok(nb_read) = stdin.read_line(&mut line) {
         if nb_read == 0 {
             break; // End of file, nothing more to read.
@@ -61,27 +63,30 @@ fn main() {
         let word = word.as_bytes();
 
         // Takes the optmized version of levenshtein if it can.
-        let mut results = if leveinshtein_bit.allows(word, max_distance) {
+        if leveinshtein_bit.allows(word, max_distance) {
             leveinshtein_bit.reset(word);
-            searcher.search(&mut leveinshtein_bit, max_distance)
+            searcher.search(&mut leveinshtein_bit, max_distance, &mut results);
         } else {
             leveinshtein.reset(word);
-            searcher.search(&mut leveinshtein, max_distance)
+            searcher.search(&mut leveinshtein, max_distance, &mut results);
         };
 
         line.clear(); // To prevent reading the same line again and again
         write!(stdout, "[").unwrap();
 
-        if let Some(result) = results.next() {
+        let mut results_iter = results.iter();
+
+        if let Some(result) = results_iter.next() {
             write_word_data(&mut stdout, &result);
         }
 
-        for result in results {
+        for result in results_iter {
             write!(stdout, ",").unwrap();
             write_word_data(&mut stdout, &result);
         }
 
         writeln!(stdout, "]").unwrap();
         stdout.flush().unwrap();
+        results.clear();
     }
 }
