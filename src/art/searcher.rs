@@ -225,9 +225,12 @@ impl ArtSearch {
                     distance.pop();
 
                     if header.nb_children <= nb_visited_children {
-                        debug_assert!(node.keys[(i + 1)..].iter().all(|key| *key == core::u8::MAX), "No keys after nb_children have been visited");
+                        debug_assert!(
+                            node.keys[(i + 1)..].iter().all(|key| *key == core::u8::MAX),
+                            "No keys after nb_children have been visited"
+                        );
 
-                        break;// Already visited all nodes, no node next to visit
+                        break; // Already visited all nodes, no node next to visit
                     }
                 }
             }
@@ -247,9 +250,12 @@ impl ArtSearch {
                         distance.pop();
 
                         if header.nb_children <= nb_visited_children {
-                            debug_assert!(node.pointers[(i + 1)..].iter().all(|ptr| ptr.is_none()), "No keys after nb_children have been visited");
+                            debug_assert!(
+                                node.pointers[(i + 1)..].iter().all(|ptr| ptr.is_none()),
+                                "No keys after nb_children have been visited"
+                            );
 
-                            break;// Already visited all nodes, no node next to visit
+                            break; // Already visited all nodes, no node next to visit
                         }
                     }
                 }
