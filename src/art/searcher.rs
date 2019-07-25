@@ -203,11 +203,16 @@ impl ArtSearch {
             NodeKind::Node48 => {
                 let node = unsafe { get::<Node48>(&self.memory, index) };
 
+                // For early stopping of the algorithm.
+                let mut nb_visited_children = 0;
+
                 for i in 0..node.keys.len() {
                     let new_index = node.keys[i];
                     if new_index == core::u8::MAX {
                         continue; // Not a pointer
                     }
+                    nb_visited_children += 1;
+
                     distance.push(i as u8);
                     if distance.can_continue(max_distance) {
                         self.distance_search(
@@ -218,18 +223,34 @@ impl ArtSearch {
                         );
                     }
                     distance.pop();
+
+                    if header.nb_children <= nb_visited_children {
+                        debug_assert!(node.keys[(i + 1)..].iter().all(|key| *key == core::u8::MAX), "No keys after nb_children have been visited");
+
+                        break;// Already visited all nodes, no node next to visit
+                    }
                 }
             }
             NodeKind::Node256 => {
                 let node = unsafe { get::<Node256>(&self.memory, index) };
 
+                let mut nb_visited_children = 0;
+
                 for i in 0..node.pointers.len() {
                     if let Some(index) = node.pointers[i] {
+                        nb_visited_children += 1;
+
                         distance.push(i as u8);
                         if distance.can_continue(max_distance) {
                             self.distance_search(index.get(), distance, max_distance, result);
                         }
                         distance.pop();
+
+                        if header.nb_children <= nb_visited_children {
+                            debug_assert!(node.pointers[(i + 1)..].iter().all(|ptr| ptr.is_none()), "No keys after nb_children have been visited");
+
+                            break;// Already visited all nodes, no node next to visit
+                        }
                     }
                 }
             }

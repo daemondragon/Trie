@@ -56,7 +56,7 @@ fn main() {
         )
         .expect("The distance is not a number");
 
-        let word = words
+        let word: &str = words
             .next()
             .expect("Expected the word to search as last argument");
 

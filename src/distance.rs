@@ -325,62 +325,68 @@ impl IncrementalDistance for DamerauLevenshteinBitDistance {
         }
         let pm = pm;
 
+        // Get all previous bit_vectors
+        let previous_offset = offset - NB_BIT_VECTORS;
+        let (pm_1, d0_1, vp_1, vn_1) = unsafe {
+            (
+                *self.bit_vectors.get_unchecked(previous_offset),
+                *self.bit_vectors.get_unchecked(previous_offset + 1),
+                *self.bit_vectors.get_unchecked(previous_offset + 2),
+                *self.bit_vectors.get_unchecked(previous_offset + 3),
+            )
+        };
+
+        // Compute the new bit_vectors
+        let d0 = ((!d0_1) & pm).overflowing_shl(1).0 & pm_1;
+        let d0 = d0 | (((pm & vp_1).overflowing_add(vp_1).0) ^ vp_1) | pm | vn_1;
+        let hp = vn_1 | !(d0 | vp_1);
+        let hn = d0 & vp_1;
+
+        let hp_shiffted = hp.overflowing_shl(1).0;
+        let hn_shiffted = hn.overflowing_shl(1).0;
+
+        let vp = hn_shiffted | !(d0 | (hp_shiffted | 1));
+        let vn = d0 & (hp_shiffted | 1);
+
+        // Insert all values back into the iterator
         unsafe {
-            // Get all previous bit_vectors
-            let previous_offset = offset - NB_BIT_VECTORS;
-            let pm_1 = *self.bit_vectors.get_unchecked(previous_offset);
-            let d0_1 = *self.bit_vectors.get_unchecked(previous_offset + 1);
-            let vp_1 = *self.bit_vectors.get_unchecked(previous_offset + 2);
-            let vn_1 = *self.bit_vectors.get_unchecked(previous_offset + 3);
-
-            // Compute the new bit_vectors
-            let d0 = ((!d0_1) & pm).overflowing_shl(1).0 & pm_1;
-            let d0 = d0 | (((pm & vp_1).overflowing_add(vp_1).0) ^ vp_1) | pm | vn_1;
-            let hp = vn_1 | !(d0 | vp_1);
-            let hn = d0 & vp_1;
-
-            let hp_shiffted = hp.overflowing_shl(1).0;
-            let hn_shiffted = hn.overflowing_shl(1).0;
-
-            let vp = hn_shiffted | !(d0 | (hp_shiffted | 1));
-            let vn = d0 & (hp_shiffted | 1);
-
-            // Insert all values back into the iterator
             *self.bit_vectors.get_unchecked_mut(offset) = pm;
             *self.bit_vectors.get_unchecked_mut(offset + 1) = d0;
             *self.bit_vectors.get_unchecked_mut(offset + 2) = vp;
             *self.bit_vectors.get_unchecked_mut(offset + 3) = vn;
+        }
 
-            // Construct the new distance, min distance and min distance index
-            let previous_info = self.distances.get_unchecked(self.current.len() - 1);
+        // Construct the new distance, min distance and min distance index
+        let previous_info = unsafe { self.distances.get_unchecked(self.current.len() - 1) };
 
-            let word_len_mask = 1_usize.overflowing_shl(self.word.len() as u32 - 1).0;
-            let new_distance = previous_info.distance + ((hp & word_len_mask) != 0) as usize
-                - ((hn & word_len_mask) != 0) as usize;
+        let word_len_mask = 1_usize.overflowing_shl(self.word.len() as u32 - 1).0;
+        let new_distance = previous_info.distance + ((hp & word_len_mask) != 0) as usize
+            - ((hn & word_len_mask) != 0) as usize;
 
-            // Get the new min_distance by searching it in the row.
-            let mut new_min_distance = new_distance;
-            let mut new_min_distance_mask = word_len_mask;
+        // Get the new min_distance by searching it in the row.
+        let mut new_min_distance = new_distance;
+        let mut new_min_distance_mask = word_len_mask;
 
-            while new_min_distance_mask != 0 {
-                let tmp_new_min_distance = new_min_distance
-                    - ((vp & new_min_distance_mask) != 0) as usize
-                    + ((vn & new_min_distance_mask) != 0) as usize;
+        while new_min_distance_mask != 0 {
+            let tmp_new_min_distance = new_min_distance
+                - ((vp & new_min_distance_mask) != 0) as usize
+                + ((vn & new_min_distance_mask) != 0) as usize;
 
-                new_min_distance_mask = new_min_distance_mask.overflowing_shr(1).0;
+            new_min_distance_mask = new_min_distance_mask.overflowing_shr(1).0;
 
-                if tmp_new_min_distance < new_min_distance {
-                    new_min_distance = tmp_new_min_distance;
-                }
+            if tmp_new_min_distance < new_min_distance {
+                new_min_distance = tmp_new_min_distance;
             }
+        }
 
+        unsafe {
             *self.distances.get_unchecked_mut(self.current.len()) = BitDistance {
                 distance: new_distance,
                 min_distance: new_min_distance,
             };
-
-            new_distance
         }
+
+        new_distance
     }
 
     fn pop(&mut self) -> bool {
@@ -602,5 +608,35 @@ mod tests {
                 distance_calculator
             );
         }
+    }
+
+    #[test]
+    fn bit_reset() {
+        let first_word = "hello";
+        let second_word = "world";
+
+        let mut distance_calculator = DamerauLevenshteinBitDistance::new(first_word.as_bytes());
+        let calculated_distance = first_word
+            .as_bytes()
+            .iter()
+            .map(|value| distance_calculator.push(*value))
+            .last()
+            .unwrap();
+
+        // This is the same word
+        assert_eq!(0, calculated_distance);
+
+        // Reseting the distance calculator
+        distance_calculator.reset(second_word.as_bytes());
+
+        let calculated_distance = first_word
+            .as_bytes()
+            .iter()
+            .map(|value| distance_calculator.push(*value))
+            .last()
+            .unwrap();
+
+        // The matching word have been changed meanwhile
+        assert_ne!(0, calculated_distance);
     }
 }
