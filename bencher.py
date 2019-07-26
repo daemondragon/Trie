@@ -3,8 +3,6 @@ import subprocess
 import re
 import time
 
-
-
 SEARCH_STRUCTURE_LIST = [
 {
     "name": "art",
@@ -24,8 +22,9 @@ FILES = [ {
     "queries": [ "split/query_{}_{}_{}.txt".format(amount, proportion, 100 - proportion) for proportion in [25, 50, 75] ]
 } for amount in [1000, 10000, 100000] ]
 
+
 FILES.append({
-    "name": "split/all.txt",
+    "name": "all.txt",
     "suffix": "_all.bin",
     "queries": [ "split/query_100000_{}_{}.txt".format(proportion, 100 - proportion) for proportion in [25, 50, 75] ]
 })

@@ -25,9 +25,8 @@ the word in this binary. The reference will not find it.
 ## Compilation
 
 To compile this program, use `cargo build --release`
-This will create the two wanted file in `target/release`
+This will create the two wanted files in `target/release`
 that will then need to be moved to the root of the project.
-
 
 ## Questions
 
@@ -216,3 +215,45 @@ Testing query file "./split/query_100000_25_75.txt"
 distance: 0, time: 0 ms (+- 0 ms) => 3000000 query/sec (+- 0 query)
 distance: 1, time: 574 ms (+- 30 ms) => 5226 query/sec (+- 273 query)
 distance: 2, time: 4761 ms (+- 82 ms) => 630 query/sec (+- 10 query)
+
+### 394f470
+
+Testing trie "compiled/art_1000.bin"
+Testing query file "./split/query_1000_75_25.txt"
+distance: 0, time: 0 ms (+- 0 ms) => 1000000 query/sec (+- 0 query)
+distance: 1, time: 25 ms (+- 1 ms) => 40000 query/sec (+- 1600 query)
+distance: 2, time: 71 ms (+- 1 ms) => 14084 query/sec (+- 198 query)
+Testing query file "./split/query_1000_50_50.txt"
+distance: 0, time: 0 ms (+- 0 ms) => 1000000 query/sec (+- 0 query)
+distance: 1, time: 24 ms (+- 0 ms) => 41666 query/sec (+- 0 query)
+distance: 2, time: 71 ms (+- 1 ms) => 14084 query/sec (+- 198 query)
+Testing query file "./split/query_1000_25_75.txt"
+distance: 0, time: 0 ms (+- 0 ms) => 1000000 query/sec (+- 0 query)
+distance: 1, time: 25 ms (+- 1 ms) => 40000 query/sec (+- 1600 query)
+distance: 2, time: 91 ms (+- 12 ms) => 10989 query/sec (+- 1449 query)
+Testing trie "compiled/art_10000.bin"
+Testing query file "./split/query_10000_75_25.txt"
+distance: 0, time: 0 ms (+- 0 ms) => 3000000 query/sec (+- 0 query)
+distance: 1, time: 281 ms (+- 32 ms) => 10676 query/sec (+- 1215 query)
+distance: 2, time: 1205 ms (+- 67 ms) => 2489 query/sec (+- 138 query)
+Testing query file "./split/query_10000_50_50.txt"
+distance: 0, time: 0 ms (+- 0 ms) => 3000000 query/sec (+- 0 query)
+distance: 1, time: 245 ms (+- 11 ms) => 12244 query/sec (+- 549 query)
+distance: 2, time: 1186 ms (+- 32 ms) => 2529 query/sec (+- 68 query)
+Testing query file "./split/query_10000_25_75.txt"
+distance: 0, time: 0 ms (+- 0 ms) => 3000000 query/sec (+- 0 query)
+distance: 1, time: 246 ms (+- 4 ms) => 12195 query/sec (+- 198 query)
+distance: 2, time: 1212 ms (+- 62 ms) => 2475 query/sec (+- 126 query)
+Testing trie "compiled/art_100000.bin"
+Testing query file "./split/query_100000_75_25.txt"
+distance: 0, time: 1 ms (+- 1 ms) => 3000000 query/sec (+- 3000000 query)
+distance: 1, time: 760 ms (+- 117 ms) => 3947 query/sec (+- 607 query)
+distance: 2, time: 5527 ms (+- 476 ms) => 542 query/sec (+- 46 query)
+Testing query file "./split/query_100000_50_50.txt"
+distance: 0, time: 1 ms (+- 0 ms) => 3000000 query/sec (+- 0 query)
+distance: 1, time: 528 ms (+- 3 ms) => 5681 query/sec (+- 32 query)
+distance: 2, time: 4632 ms (+- 100 ms) => 647 query/sec (+- 13 query)
+Testing query file "./split/query_100000_25_75.txt"
+distance: 0, time: 0 ms (+- 0 ms) => 3000000 query/sec (+- 0 query)
+distance: 1, time: 530 ms (+- 49 ms) => 5660 query/sec (+- 523 query)
+distance: 2, time: 4956 ms (+- 591 ms) => 605 query/sec (+- 72 query)
