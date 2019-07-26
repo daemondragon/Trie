@@ -16,11 +16,18 @@ Furthermore, the program must not use most than 512M of RAM.
 This is why both wanted binary first limit the maximum RAM usage
 so that tests can be done in real condition
 
+This projet SUPPORT utf8 in contrary of the reference binary.
+For instance, having a compiled file with:
+`Τὴγλῶσσαμοῦἔδωσανἑλληνικὴ 65535`
+and than searching the word into both binary will only output
+the word in this binary. The reference will not find it.
+
 ## Compilation
 
 To compile this program, use `cargo build --release`
 This will create the two wanted file in `target/release`
 that will then need to be moved to the root of the project.
+
 
 ## Questions
 
