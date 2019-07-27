@@ -8,11 +8,13 @@ SEARCH_STRUCTURE_LIST = [
     "name": "art",
     "compiler": "target/release/TextMiningCompiler",
     "searcher": "target/release/TextMiningApp",
+    "prefix": "art"
 },
 {
     "name": "ref",
     "compiler": "ref/linux64/TextMiningCompiler",
     "searcher": "ref/linux64/TextMiningApp",
+    "prefix": "ref"
 }
 ]
 
@@ -34,7 +36,7 @@ DISTANCE_LIST = [0, 1, 2]
 
 for search in SEARCH_STRUCTURE_LIST:
     for file in FILES:
-        filename = "compiled/{}{}".format(search['name'], file['suffix'])
+        filename = "compiled/{}{}".format(search['prefix'], file['suffix'])
         if not os.path.exists(filename):
             print("Compiling {}...".format(filename))
             subprocess.run([search['compiler'], file['name'], filename], capture_output=True)
@@ -59,7 +61,7 @@ for file in FILES:
 
             for search in SEARCH_STRUCTURE_LIST:
                 times = []
-                args = [search['searcher'], "compiled/{}{}".format(search['name'], file['suffix'])]
+                args = [search['searcher'], "compiled/{}{}".format(search['prefix'], file['suffix'])]
 
                 for i in range(10):
                     start = time.monotonic()
