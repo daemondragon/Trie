@@ -19,8 +19,9 @@ so that tests can be done in real condition
 This projet SUPPORT utf8 in contrary of the reference binary.
 For instance, having a compiled file with:
 `Τὴγλῶσσαμοῦἔδωσανἑλληνικὴ 65535`
-and than searching the word into both binary will only output
+and then searching the word into both binary will only output
 the word in this binary. The reference will not find it.
+(However the distance is in byte, not in visual character).
 
 ## Compilation
 
@@ -28,15 +29,106 @@ To compile this program, use `cargo build --release`
 This will create the two wanted files in `target/release`
 that will then need to be moved to the root of the project.
 
+A Makefile is provided `make` to build the project in release mode and
+move the wanted file to the root of the project directory.
+
+The program need Rust and cargo installed (last version currently).
+`rustc --version`: `rustc 1.36.0 (a53f9df32 2019-07-03)`
+`cargo --version`: `cargo 1.36.0 (c4fcfb725 2019-05-15)`
+
 ## Questions
 
 ### Décrivez les choix de design de votre programme
+
+Trois principales interfaces sont disponibles dans ce programme:
+
+Compiler et Search, les deux interfaces pour le compiler et la structure de recherche.
+Avoir des interfaces de cette manière permet d'implementer facilement la compilation et la recherche
+pour différente structure. Cela à permet de comparer la version actuelle d'un trie basique, ainsi
+que la réf réimplementée, sans avoir à tout adapter à chaque fois.
+
+La dernière interface est IncrementalDistance que prend en paramètre Search.
+Une distance incrémentale est une distance qui peut se calculer au fur et à mesure
+en ajoutant des charactères les un à la suite des autres.
+Avoir une interface pour la distance à permit d'implémenter facilement deux distances
+différentes pour ce projet (toute de Damerau Levenshtein).
+La première est une version "basique", fonctionnant dans tous les cas.
+La deuxième est une distance implémentée directement avec des opérations bitwise,
+bien plus rapide, mais ne fonctionnant que sur des recherches sur des mots d'une
+longueur <= 64 bits (soit 100% des mots du fichier fourni).
+
+La structure implémenter étant un ART, il y a 5 types de noeuds différents, chacun
+pouvant stocker un nombre de fils différents. Toutefois, tous ont un header contentant
+la frequence du mots (ou 0 si le noeuds courant ne représente pas un mot).
+Le header contient aussi directement le chemin compresser (1 byte pour la longueur du chemin compressé,
+7 pour le chemin en lui même). Cela permet ne pas avoir à stocker les chemin à un endroit différent des noeuds,
+réduisant les déréferencements tout en simplifiant le code.
+Cela veut dire que les chemins ne sont pas compressés optimalement, mais dans la plupart des cas, c'est largement suffisant.
+
+La compilation se fait sur un dictionnaire trié, avec un seul chemin de l'ART en mémoire,
+les noeuds restant étant écris sur le fichier dès qu'ils sont devenus inutiles pour la construction de l'arbre.
+
 ### Listez l’ensemble des tests effectués sur votre programme (en plus des units tests)
+
+En plus des tests unitaires, deux autres tests sont faient:
+`python3 differ.py`: Diff l'output du binaire avec la ref, sur différents fichiers avec différent fichiers de queries.
+`python3 bencher.py`: Compare les performances du binaire créer avec la ref.
+`cargo run --release --bin trie bench`: Lance les tests de performance pour ce binaire seulement
+(pour voir rapidement les différences entre plusieurs version du code).
+
 ### Avez-vous détecté des cas où la correction par distance ne fonctionnait pas (même avec une distance élevée) ?
+
+La correction par distance fonctionne très mal sur des petits mots (<= 3 lettres),
+proposant souvant des mots aussi courts, mais n'ayant aucun rapport (e.g: "pe" (au lieu de "me") -> "et").
+
 ### Quelle est la structure de données que vous avez implémentée dans votre projet, pourquoi ?
+
+La structure implémentée est un ART (Adaptive Radix Tree).
+Plusieurs raisons pour cela:
+- C'est une des implementation de comparaison de référence dans l'état de l'art actuellement
+(d'autre strutures existent, mais sont plus compliquées).
+- Elle implémente plusieurs choses vue en cours: la compression de chemin et la compression de noeuds.
+- Elle est relativement simple à mettre en place, le papier de référence étant très clair.
+
 ### Proposez un réglage automatique de la distance pour un programme qui prend juste une chaîne de caractères en entrée, donner le processus d’évaluation ainsi que les résultats
+
+DISTANCE = TAILLE / 5 + 1
+=> 1..4: 1
+=> 5..9: 2
+=> 10..14: 3
+...
+
+Le processus d'évaluation est le score F1 (2 * (precision * recall) / (precision + recall))
+
 ### Comment comptez vous améliorer les performances de votre programme
+
+Plusieurs solutions sont possibles:
+
+- Detecter le benchmark (`isatty(stdin)`), dans ce cas, toutes les recherches sont présentes
+d'un coup, il n'y a pas de besoin de faire toutes les recherches séquentiellement, on peut les batcher
+et retrier à la sortie (http://dbgroup.cs.tsinghua.edu.cn/wangjn/papers/vldb2010-triejoin.pdf)
+(c'est de la triche, et alors ?)
+
+- Supprimer l'allocation de String pour utiliser un énorme buffer de bytes pour les stocker séquentiellement,
+et réutiliser le buffer entre chaque requête.
+(possible car les strings ne sont pas modifiées après insertion dans le vecteur de résultat).
+
+- Trouver un moyen de faire l'early stopping sans utiliser la distance minimale dans une ligne.
+Le calcul de la distance minimale sur une ligne est ce qui prend le plus de temps dans le programme actuellement.
+Le calcul doit être fait pour l'instant car la ligne se calcule d'un coup, avec des opérations binaires.
+Pour information, la distance prend 60% du temps d'exécution, et le calcul de la distance minimal environ 35% de ce temps.
+
+- Changer de structure de données afin de limiter les accès disques (https://dbis-informatik.uibk.ac.at/sites/default/files/2018-06/hot-height-optimized.pdf)
+
 ### Que manque-t-il à votre correcteur orthographique pour qu’il soit à l’état de l’art ?
+
+Un changement de la structure de données pour une version plus optimisée au niveau des disques:
+(https://dbis-informatik.uibk.ac.at/sites/default/files/2018-06/hot-height-optimized.pdf)
+
+Cette nouvelle structure permet de traiter tout un noeuds directement avec des opérations binaires
+afin de rechercher plus efficacement les mots.
+De plus, chaque noeud contient un patricia trie et permet de rééquilibrer l'arbre afin de limiter
+sa hauteur, réduisant les accès disques.
 
 ## Performance
 

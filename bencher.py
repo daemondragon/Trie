@@ -53,7 +53,7 @@ for file in FILES:
 
         # Add approx before
         content = re.sub(r"^", "approx ", content, flags=re.MULTILINE)
-        content = re.sub(r"[0-9]+$", "", content, flags=re.MULTILINE)
+        content = re.sub(r"\s+[0-9]+$", "", content, flags=re.MULTILINE)
 
         for distance in DISTANCE_LIST:
             # Change the distance
